@@ -48,7 +48,7 @@ object AudioMetadata {
                 if (requestedName != originalName) {\n                    // Renaming is a separate provider operation and may fail independently.\n                    check(doc.renameTo(requestedName)) { "태그 저장은 성공했지만 파일명 변경에 실패했습니다." }\n                }
             } catch (error: Exception) {
                 val restored = runCatching { context.contentResolver.openOutputStream(uri, "wt")!!.use { output -> backup.inputStream().use { it.copyTo(output) } } }.isSuccess
-                if (!restored) error("저장 실패 및 자동 복구 실패. 원본 파일을 확인하세요.", error)
+                if (!restored) throw IllegalStateException("저장 실패 및 자동 복구 실패. 원본 파일을 확인하세요.", error)
                 throw error
             }
         } finally { backup.delete() }
