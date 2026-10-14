@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets
 data class AudioInfo(val fileName: String, val title: String, val artist: String, val album: String, val supported: Boolean)
 
 object AudioMetadata {
+    fun isEditable(context: Context, uri: Uri): Boolean = read(context, uri).supported
+
     fun read(context: Context, uri: Uri): AudioInfo {
         val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "audio"
         if (!name.endsWith(".mp3", true)) return AudioInfo(name, "", "", "", false)
@@ -23,13 +25,13 @@ object AudioMetadata {
     fun save(context: Context, uri: Uri, title: String, artist: String, album: String, requestedName: String): Result<Unit> = runCatching {
         val doc = DocumentFile.fromSingleUri(context, uri) ?: error("파일에 접근할 수 없습니다.")
         val originalName = doc.name ?: error("파일명을 확인할 수 없습니다.")
-        require(originalName.endsWith(".mp3", true)) { "현재는 MP3 파일만 저장할 수 있습니다." }
+        require(originalName.endsWith(".mp3", true)) { "현재는 MP3 파일만 저장할 수 있습니다." }\n        require(isEditable(context, uri)) { "지원하지 않는 ID3 구조이므로 원본을 수정하지 않았습니다." }
         require(requestedName.endsWith(".mp3", true)) { "확장자 변환은 아직 지원하지 않습니다. MP3 확장자를 유지하세요." }
         require('/' !in requestedName && '\\' !in requestedName && requestedName.isNotBlank()) { "올바른 파일명을 입력하세요." }
         val bytes = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         val offset = id3Size(bytes)
         val newTag = buildTagPreservingFrames(bytes, title, artist, album)
-        val updated = ByteArrayOutputStream().apply {
+        require(bytes.size <= 200 * 1024 * 1024) { "200MB 초과 파일은 아직 지원하지 않습니다." }\n        val updated = ByteArrayOutputStream().apply {
             write(newTag)
             write(bytes, offset, bytes.size - offset)
         }.toByteArray()
@@ -41,7 +43,7 @@ object AudioMetadata {
                 context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(updated) }
                 val verified = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                 check(verified.contentEquals(updated)) { "저장 검증에 실패했습니다." }
-                if (requestedName != originalName) check(doc.renameTo(requestedName)) { "태그 저장은 성공했지만 파일명 변경에 실패했습니다." }
+                if (requestedName != originalName) {\n                    // Renaming is a separate provider operation and may fail independently.\n                    check(doc.renameTo(requestedName)) { "태그 저장은 성공했지만 파일명 변경에 실패했습니다." }\n                }
             } catch (error: Exception) {
                 runCatching { context.contentResolver.openOutputStream(uri, "wt")!!.use { output -> backup.inputStream().use { it.copyTo(output) } } }
                 throw error
