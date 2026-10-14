@@ -1,51 +1,81 @@
 # 🎵 Music Magic
 
-**내 음악을, 내 마음대로.** / *Your music, your details.*
+<p align="center"><b>내 음악을, 내 마음대로.</b><br/>Android-native audio metadata editor with an iOS-inspired interface.</p>
 
-Android-native, offline-first audio metadata editor with an iOS-inspired interface.
+<p align="center">
+  <img alt="Android" src="https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white" />
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white" />
+  <img alt="Offline" src="https://img.shields.io/badge/Processing-100%25%20Local-0A84FF" />
+</p>
 
 [한국어](#한국어) · [English](#english)
 
+---
+
 ## 한국어
 
-### 핵심 원칙
-- 앱 내부 데이터가 아닌 **실제 음악 파일의 태그**를 수정합니다.
-- 기본 저장 방식은 **원본 덮어쓰기**입니다.
-- 서버, 회원가입, 광고 없이 기기에서 처리합니다.
+Music Magic은 앱 안에서만 제목을 바꿔 보이는 플레이어가 아닙니다. 선택한 **실제 오디오 파일에 메타데이터를 기록**하고, 기본적으로 그 원본 파일을 덮어씁니다.
 
-### 현재 구현 범위 (v0.1 초기 코드)
-- Kotlin + Jetpack Compose 홈/편집 화면
-- Android 파일 선택기(SAF)
-- MP3 ID3v2 제목(TIT2), 아티스트(TPE1), 앨범(TALB) 읽기/쓰기
-- MP3 파일명 변경
-- 저장 후 바이트 단위 검증 및 실패 시 복원 시도
+### ✨ 기능
 
-### 주의사항 및 로드맵
-- **현재 MP3만 수정 가능합니다.** FLAC, M4A, WAV, OGG, OPUS 및 실제 포맷 변환은 아직 미구현입니다.
-- ID3v2.3 일반 프레임은 기존 앨범아트(APIC)와 기타 태그를 보존하도록 변경했지만, 모든 특수 태그 및 저장소 제공자에서 안전성이 검증된 것은 아닙니다. **중요한 파일은 백업 후 테스트하세요.**
-- SAF 제공자에 따라 덮어쓰기가 원자적으로 보장되지 않습니다. 복구도 항상 보장되지 않습니다.
-- 다음 단계: 태그 보존형 편집 엔진, 앨범아트, 다중 선택/일괄 편집, 변환 엔진, 안전한 저장 트랜잭션, 테스트 및 APK 릴리스.
-- 이 저장소에는 아직 CI 빌드 결과나 검증된 APK가 없습니다.
+- 실제 파일 메타데이터 편집: 제목, 아티스트(만든이), 앨범, 앨범 아티스트, 장르, 연도, 트랙 번호
+- 파일명 및 확장자 문자열 변경
+- Android Storage Access Framework 기반 파일 선택/쓰기
+- MP3 · FLAC · M4A/MP4 · OGG · Opus · WAV · AIFF · WMA · DSF 메타데이터 처리
+- 라이트/다크 모드 대응 iOS 스타일 Jetpack Compose UI
+- 로그인 · 서버 · 광고 없이 100% 로컬 처리
 
-### 빌드
-Android Studio에서 열고 JDK 17 및 Android SDK 35를 설치한 뒤 Gradle Sync → Run.
+> **확장자 변경은 파일명 변경입니다.** `song.mp3`를 `song.flac`으로 바꿔도 코덱을 FLAC으로 재인코딩하지 않습니다. 메타데이터 수정 자체도 오디오 스트림을 재인코딩하지 않습니다.
+
+### 🛡️ 원본 덮어쓰기 안전장치
+
+저장 시 바로 원본을 건드리지 않습니다. 캐시의 작업본에 먼저 메타데이터를 기록하고 다시 읽어 검증한 뒤 원본을 덮어씁니다. 덮어쓰기 후 실제 URI를 다시 읽어 핵심 태그를 재검증하며, 실패하면 보관해 둔 원본 복사본으로 복구를 시도합니다. 1GB를 초과하는 파일은 안전을 위해 차단합니다.
+
+Android 문서 제공자(SAF)의 동작은 제조사·클라우드 서비스마다 다를 수 있으므로 **중요한 파일은 처음 사용하기 전에 별도 백업을 권장합니다.**
+
+### 📦 설치 / 빌드
+
+`main` 브랜치 푸시마다 GitHub Actions에서 `:app:assembleDebug`를 수행하고 설치 가능한 debug APK를 artifact로 생성합니다.
+
+로컬 빌드 환경은 JDK 17, Android SDK 35, Gradle 8.9 기준입니다. Android Studio에서 저장소를 열고 Gradle Sync 후 실행할 수 있습니다.
+
+### ✅ v1.0.0 상태
+
+- CI Android debug APK 빌드 성공
+- 메타데이터 엔진: `jaudiotagger-android`
+- 원본 덮어쓰기 전/후 검증 및 best-effort 복구 구현
+- 파일명/확장자 rename 구현
+- 실기기별 SAF 및 각 플레이어 호환성은 실제 기기 테스트가 추가로 필요
+
+---
 
 ## English
 
-Music Magic edits **embedded file metadata**, not just the app's display. Default behavior is overwriting the selected source document. No backend or login.
+Music Magic edits **metadata embedded in the actual audio file** rather than storing cosmetic changes inside the app. The selected source document is overwritten by default.
 
-**Initial source only:** MP3 ID3v2 title/artist/album read/write, MP3 rename, SAF picker, Compose UI, write verification and best-effort recovery. Other audio formats, album artwork preservation, batch editing and conversion are **not implemented yet**. The current ID3v2.3 writer attempts to preserve unrelated frames and artwork; it has not been validated against every ID3 variation or Android document provider. Back up valuable files first. SAF writes are not guaranteed atomic. Build with Android Studio, JDK 17 and SDK 35.
+### Features
 
+- Edit title, artist, album, album artist, genre, year and track number
+- Rename file names and filename extensions
+- Metadata handling for MP3, FLAC, M4A/MP4, OGG, Opus, WAV, AIFF, WMA and DSF
+- Android Storage Access Framework support
+- iOS-inspired Jetpack Compose UI with light/dark mode
+- Fully local: no login, backend or ads
 
-## Completion gates / 완료 조건
+> Changing a filename extension does **not** transcode the audio codec. Metadata editing also does not re-encode the audio stream.
 
-- [ ] Android CI debug APK build passes and artifact is downloadable
-- [ ] Test MP3 with ID3v2.3, ID3v2.4, ID3v1, unsynchronisation and artwork
-- [ ] Test original overwrite and recovery on local SAF and cloud document providers
-- [ ] Implement lossless metadata edits for FLAC, M4A, OGG/Opus and supported WAV tags
-- [ ] Implement genuine format conversion (not just filename extension changes)
-- [ ] Add batch operations and artwork editing
-- [ ] Validate output with Samsung Music, VLC and desktop metadata readers
-- [ ] Release a signed, device-tested Android APK
+### Safe overwrite strategy
 
-**Project status:** experimental source, not a finished or verified Android release.
+Music Magic edits and verifies a temporary working copy first, keeps a backup copy of the selected source, overwrites the original only after verification, re-reads the actual document after writing, and attempts recovery if the provider write fails. Files larger than 1 GiB are rejected.
+
+Provider behavior varies across Android devices and cloud document providers. Back up valuable files before first use.
+
+### Build
+
+The `main` branch is built by GitHub Actions with JDK 17 / Android SDK 35 / Gradle 8.9. A signed debug APK is uploaded as the `music-magic-debug` workflow artifact.
+
+---
+
+## Third-party
+
+Music Magic uses the Android-compatible jaudiotagger fork for audio metadata handling. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for attribution and license information.
