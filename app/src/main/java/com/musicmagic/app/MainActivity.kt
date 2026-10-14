@@ -10,7 +10,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -47,7 +46,7 @@ class MainActivity : ComponentActivity() {
                     title = info.title
                     artist = info.artist
                     album = info.album
-                    status = if (info.supported) "" else "이 형식은 아직 메타데이터 저장을 지원하지 않습니다."
+                    status = if (info.supported) "" else "이 파일의 태그 형식은 안전한 저장을 지원하지 않습니다."
                 }
             }
             MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Background, surface = Color.White)) {
@@ -76,7 +75,7 @@ class MainActivity : ComponentActivity() {
                                 OutlinedTextField(value = fileName, onValueChange = { fileName = it }, label = { Text("파일명") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                             }
                         }
-                        Button(enabled = !busy, onClick = {
+                        Button(enabled = !busy && selected?.let { AudioMetadata.isEditable(this@MainActivity, it) } == true, onClick = {
                             val uri = selected ?: return@Button
                             busy = true
                             scope.launch {
@@ -91,7 +90,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     if (status.isNotEmpty()) Text(status, color = if (status.startsWith("원본")) Color(0xFF168553) else Color(0xFFB45309))
-                    Text("현재 버전: MP3 ID3v2 편집 지원 · 기타 형식은 추후 지원", fontSize = 12.sp, color = Color.Gray)
+                    Text("현재 버전: MP3 ID3v2.3 안전 편집 · 기타 형식은 추후 지원", fontSize = 12.sp, color = Color.Gray)
                 }
             }
         }
