@@ -22,7 +22,7 @@ Android-native, offline-first audio metadata editor with an iOS-inspired interfa
 
 ### 주의사항 및 로드맵
 - **현재 MP3만 수정 가능합니다.** FLAC, M4A, WAV, OGG, OPUS 및 실제 포맷 변환은 아직 미구현입니다.
-- 현재 MP3 저장은 기존 ID3 태그 전체를 새로 생성하므로 **앨범아트 및 기타 태그가 유실될 수 있습니다. 실제 중요한 파일에 사용하지 마세요.**
+- ID3v2.3 일반 프레임은 기존 앨범아트(APIC)와 기타 태그를 보존하도록 변경했지만, 모든 특수 태그 및 저장소 제공자에서 안전성이 검증된 것은 아닙니다. **중요한 파일은 백업 후 테스트하세요.**
 - SAF 제공자에 따라 덮어쓰기가 원자적으로 보장되지 않습니다. 복구도 항상 보장되지 않습니다.
 - 다음 단계: 태그 보존형 편집 엔진, 앨범아트, 다중 선택/일괄 편집, 변환 엔진, 안전한 저장 트랜잭션, 테스트 및 APK 릴리스.
 - 이 저장소에는 아직 CI 빌드 결과나 검증된 APK가 없습니다.
@@ -34,4 +34,18 @@ Android Studio에서 열고 JDK 17 및 Android SDK 35를 설치한 뒤 Gradle Sy
 
 Music Magic edits **embedded file metadata**, not just the app's display. Default behavior is overwriting the selected source document. No backend or login.
 
-**Initial source only:** MP3 ID3v2 title/artist/album read/write, MP3 rename, SAF picker, Compose UI, write verification and best-effort recovery. Other audio formats, album artwork preservation, batch editing and conversion are **not implemented yet**. Current MP3 rewriting discards unrelated existing tags and artwork; do not use on valuable files. SAF writes are not guaranteed atomic. Build with Android Studio, JDK 17 and SDK 35.
+**Initial source only:** MP3 ID3v2 title/artist/album read/write, MP3 rename, SAF picker, Compose UI, write verification and best-effort recovery. Other audio formats, album artwork preservation, batch editing and conversion are **not implemented yet**. The current ID3v2.3 writer attempts to preserve unrelated frames and artwork; it has not been validated against every ID3 variation or Android document provider. Back up valuable files first. SAF writes are not guaranteed atomic. Build with Android Studio, JDK 17 and SDK 35.
+
+
+## Completion gates / 완료 조건
+
+- [ ] Android CI debug APK build passes and artifact is downloadable
+- [ ] Test MP3 with ID3v2.3, ID3v2.4, ID3v1, unsynchronisation and artwork
+- [ ] Test original overwrite and recovery on local SAF and cloud document providers
+- [ ] Implement lossless metadata edits for FLAC, M4A, OGG/Opus and supported WAV tags
+- [ ] Implement genuine format conversion (not just filename extension changes)
+- [ ] Add batch operations and artwork editing
+- [ ] Validate output with Samsung Music, VLC and desktop metadata readers
+- [ ] Release a signed, device-tested Android APK
+
+**Project status:** experimental source, not a finished or verified Android release.
