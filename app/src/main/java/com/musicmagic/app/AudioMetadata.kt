@@ -149,7 +149,7 @@ object AudioMetadata {
             tag.setField(FieldKey.TRACK, edits.track)
             if (edits.artwork != null) {
                 require(edits.artwork.size <= 12 * 1024 * 1024) { "앨범아트는 12MB 이하만 가능합니다." }
-                val artwork = org.jaudiotagger.tag.datatype.ArtworkFactory.createArtworkFromBinaryData(edits.artwork)
+                val artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromBinaryData(edits.artwork)
                 tag.deleteArtworkField()
                 tag.setField(artwork)
             }
