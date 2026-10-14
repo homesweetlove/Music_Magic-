@@ -36,12 +36,14 @@ class MainActivity : ComponentActivity() {
             var album by remember { mutableStateOf("") }
             var status by remember { mutableStateOf("") }
             var busy by remember { mutableStateOf(false) }
+            var editable by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
             val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null) {
-                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
                     selected = uri
                     val info = AudioMetadata.read(this, uri)
+                    editable = info.supported
                     fileName = info.fileName
                     title = info.title
                     artist = info.artist
@@ -75,7 +77,7 @@ class MainActivity : ComponentActivity() {
                                 OutlinedTextField(value = fileName, onValueChange = { fileName = it }, label = { Text("파일명") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                             }
                         }
-                        Button(enabled = !busy && selected?.let { AudioMetadata.isEditable(this@MainActivity, it) } == true, onClick = {
+                        Button(enabled = !busy && editable, onClick = {
                             val uri = selected ?: return@Button
                             busy = true
                             scope.launch {
