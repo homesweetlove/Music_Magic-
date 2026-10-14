@@ -3,6 +3,7 @@ package com.musicmagic.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.media.MediaPlayer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -88,6 +89,7 @@ private fun MusicMagicApp() {
     var genre by remember { mutableStateOf("") }
     var year by remember { mutableStateOf("") }
     var track by remember { mutableStateOf("") }
+    var artworkBytes by remember { mutableStateOf<ByteArray?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var success by remember { mutableStateOf(false) }
@@ -102,6 +104,17 @@ private fun MusicMagicApp() {
         genre = info.genre
         year = info.year
         track = info.track
+        artworkBytes = null
+    }
+
+    val artPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            val bytes = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() }
+            if (bytes != null && bytes.size <= 12 * 1024 * 1024) {
+                artworkBytes = bytes
+                status = "앨범아트를 선택했어요. 저장하면 음악 파일에 기록됩니다."
+            } else status = "이미지를 읽을 수 없거나 12MB를 초과합니다."
+        }
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -202,6 +215,16 @@ private fun MusicMagicApp() {
                         EditorField("트랙 번호", track, { track = it })
                     }
 
+                    SectionCard(title = "앨범아트", icon = Icons.Rounded.MusicNote) {
+                        Button(onClick = { artPicker.launch("image/*") }, enabled = !busy) {
+                            Text(if (artworkBytes == null) "표지 이미지 선택" else "새 표지 선택됨 · 변경하기")
+                        }
+                    }
+
+                    SectionCard(title = "오디오 상세", icon = Icons.Rounded.Info) {
+                        Text("길이: ${info.durationSeconds}초 · 비트레이트: ${info.bitRate} · 샘플레이트: ${info.sampleRate}")
+                    }
+
                     SectionCard(title = "파일", icon = Icons.Rounded.AudioFile) {
                         EditorField("파일명 · 확장자", fileName, { fileName = it })
                         if (extensionChanged) {
@@ -241,6 +264,7 @@ private fun MusicMagicApp() {
                                             genre = genre,
                                             year = year,
                                             track = track,
+                                            artwork = artworkBytes,
                                         ),
                                     )
                                 }
