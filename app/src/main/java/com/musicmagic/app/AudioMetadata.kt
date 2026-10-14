@@ -25,13 +25,15 @@ object AudioMetadata {
     fun save(context: Context, uri: Uri, title: String, artist: String, album: String, requestedName: String): Result<Unit> = runCatching {
         val doc = DocumentFile.fromSingleUri(context, uri) ?: error("파일에 접근할 수 없습니다.")
         val originalName = doc.name ?: error("파일명을 확인할 수 없습니다.")
-        require(originalName.endsWith(".mp3", true)) { "현재는 MP3 파일만 저장할 수 있습니다." }\n        require(isEditable(context, uri)) { "지원하지 않는 ID3 구조이므로 원본을 수정하지 않았습니다." }
+        require(originalName.endsWith(".mp3", true)) { "현재는 MP3 파일만 저장할 수 있습니다." }
+        require(isEditable(context, uri)) { "지원하지 않는 ID3 구조이므로 원본을 수정하지 않았습니다." }
         require(requestedName.endsWith(".mp3", true)) { "확장자 변환은 아직 지원하지 않습니다. MP3 확장자를 유지하세요." }
         require('/' !in requestedName && '\\' !in requestedName && requestedName.isNotBlank()) { "올바른 파일명을 입력하세요." }
         val bytes = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         val offset = id3Size(bytes)
         val newTag = buildTagPreservingFrames(bytes, title, artist, album)
-        require(bytes.size <= 200 * 1024 * 1024) { "200MB 초과 파일은 아직 지원하지 않습니다." }\n        val updated = ByteArrayOutputStream().apply {
+        require(bytes.size <= 200 * 1024 * 1024) { "200MB 초과 파일은 아직 지원하지 않습니다." }
+        val updated = ByteArrayOutputStream().apply {
             write(newTag)
             write(bytes, offset, bytes.size - offset)
         }.toByteArray()
