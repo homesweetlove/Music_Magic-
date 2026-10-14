@@ -119,6 +119,7 @@ object AudioMetadata {
         require(ext in editableExtensions) { "이 오디오 형식의 메타데이터 쓰기를 지원하지 않습니다." }
         require(edits.fileName.isNotBlank()) { "파일명은 비워둘 수 없습니다." }
         require('/' !in edits.fileName && '\\' !in edits.fileName) { "파일명에 / 또는 \\ 문자를 사용할 수 없습니다." }
+        require(extensionOf(edits.fileName) == ext) { "확장자 변경은 실제 오디오 변환이 아닙니다. 기존 확장자를 유지하세요." }
         require(doc.length() <= MAX_FILE_BYTES) { "1GB를 초과하는 파일은 편집할 수 없습니다." }
 
         val backup = copyUriToTemp(context, uri, ext, "musicmagic-backup-")
@@ -144,7 +145,7 @@ object AudioMetadata {
 
             val written = AudioFileIO.read(work).tag
                 ?: error("저장 검증 중 태그를 다시 읽을 수 없습니다.")
-            verifyCoreFields(written.getFirst(FieldKey.TITLE), written.getFirst(FieldKey.ARTIST), written.getFirst(FieldKey.ALBUM), edits)
+            verifyFields(written, edits)
 
             var outputUri = uri
             try {
@@ -157,7 +158,7 @@ object AudioMetadata {
                 } ?: error("저장한 파일을 검증할 수 없습니다.")
                 val realTag = AudioFileIO.read(verify).tag
                     ?: error("저장한 파일의 메타데이터를 읽을 수 없습니다.")
-                verifyCoreFields(realTag.getFirst(FieldKey.TITLE), realTag.getFirst(FieldKey.ARTIST), realTag.getFirst(FieldKey.ALBUM), edits)
+                verifyFields(realTag, edits)
 
                 if (edits.fileName != originalName) {
                     outputUri = DocumentsContract.renameDocument(
@@ -205,10 +206,18 @@ object AudioMetadata {
         }
     }
 
-    private fun verifyCoreFields(title: String, artist: String, album: String, edits: AudioEdits) {
-        check(title == edits.title) { "제목 저장 검증에 실패했습니다." }
-        check(artist == edits.artist) { "아티스트 저장 검증에 실패했습니다." }
-        check(album == edits.album) { "앨범 저장 검증에 실패했습니다." }
+    private fun verifyFields(tag: org.jaudiotagger.tag.Tag, edits: AudioEdits) {
+        for ((field, expected) in listOf(
+            FieldKey.TITLE to edits.title,
+            FieldKey.ARTIST to edits.artist,
+            FieldKey.ALBUM to edits.album,
+            FieldKey.ALBUM_ARTIST to edits.albumArtist,
+            FieldKey.GENRE to edits.genre,
+            FieldKey.YEAR to edits.year,
+            FieldKey.TRACK to edits.track,
+        )) {
+            check(tag.getFirst(field) == expected) { "${field.name} 메타데이터 저장 검증에 실패했습니다." }
+        }
     }
 
     private fun extensionOf(name: String): String =
