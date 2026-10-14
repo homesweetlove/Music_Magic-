@@ -20,6 +20,9 @@ data class AudioInfo(
     val genre: String = "",
     val year: String = "",
     val track: String = "",
+    val durationSeconds: Long = 0L,
+    val bitRate: String = "",
+    val sampleRate: String = "",
     val format: String = "",
     val sizeBytes: Long = 0L,
     val supported: Boolean = false,
@@ -35,6 +38,7 @@ data class AudioEdits(
     val genre: String = "",
     val year: String = "",
     val track: String = "",
+    val artwork: ByteArray? = null,
 )
 
 data class SaveResult(val info: AudioInfo, val uri: Uri)
@@ -90,6 +94,9 @@ object AudioMetadata {
                 genre = tag?.getFirst(FieldKey.GENRE).orEmpty(),
                 year = tag?.getFirst(FieldKey.YEAR).orEmpty(),
                 track = tag?.getFirst(FieldKey.TRACK).orEmpty(),
+                durationSeconds = audioFile.audioHeader?.trackLength?.toLong() ?: 0L,
+                bitRate = audioFile.audioHeader?.bitRate.orEmpty(),
+                sampleRate = audioFile.audioHeader?.sampleRate.orEmpty(),
                 format = ext.uppercase(),
                 sizeBytes = size,
                 supported = true,
@@ -140,6 +147,12 @@ object AudioMetadata {
             tag.setField(FieldKey.GENRE, edits.genre)
             tag.setField(FieldKey.YEAR, edits.year)
             tag.setField(FieldKey.TRACK, edits.track)
+            if (edits.artwork != null) {
+                require(edits.artwork.size <= 12 * 1024 * 1024) { "앨범아트는 12MB 이하만 가능합니다." }
+                val artwork = org.jaudiotagger.tag.datatype.ArtworkFactory.createArtworkFromBinaryData(edits.artwork)
+                tag.deleteArtworkField()
+                tag.setField(artwork)
+            }
             audioFile.setTag(tag)
             AudioFileIO.write(audioFile)
 
