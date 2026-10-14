@@ -32,6 +32,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.documentfile:documentfile:1.0.1")
-    implementation("com.github.adonai:jaudiotagger:2.3.15")
+    implementation("com.github.adonai:jaudiotagger-android:2.3.15")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
