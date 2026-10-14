@@ -4,97 +4,463 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.AudioFile
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-private val Blue = Color(0xFF366BFF)
-private val Background = Color(0xFFF6F7FB)
+private val IosBlue = Color(0xFF0A84FF)
+private val IosGreen = Color(0xFF30D158)
+private val IosOrange = Color(0xFFFF9F0A)
+private val LightBackground = Color(0xFFF2F2F7)
+private val DarkBackground = Color(0xFF000000)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            var selected by remember { mutableStateOf<Uri?>(null) }
-            var fileName by remember { mutableStateOf("") }
-            var title by remember { mutableStateOf("") }
-            var artist by remember { mutableStateOf("") }
-            var album by remember { mutableStateOf("") }
-            var status by remember { mutableStateOf("") }
-            var busy by remember { mutableStateOf(false) }
-            var editable by remember { mutableStateOf(false) }
-            val scope = rememberCoroutineScope()
-            val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                if (uri != null) {
-                    runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
-                    selected = uri
-                    val info = AudioMetadata.read(this, uri)
-                    editable = info.supported
-                    fileName = info.fileName
-                    title = info.title
-                    artist = info.artist
-                    album = info.album
-                    status = if (info.supported) "" else "이 파일의 태그 형식은 안전한 저장을 지원하지 않습니다."
-                }
-            }
-            MaterialTheme(colorScheme = lightColorScheme(primary = Blue, background = Background, surface = Color.White)) {
-                Column(Modifier.fillMaxSize().background(Background).verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-                    Spacer(Modifier.height(12.dp))
-                    Text("Music Magic", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Color(0xFF12192D))
-                    Text("내 음악을, 내 마음대로.", color = Color.Gray)
-                    Spacer(Modifier.height(10.dp))
-                    Surface(shape = RoundedCornerShape(26.dp), color = Color.White, shadowElevation = 2.dp) {
-                        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            Icon(Icons.Rounded.LibraryMusic, contentDescription = null, tint = Blue, modifier = Modifier.size(48.dp))
-                            Text(if (selected == null) "편집할 음악을 선택하세요" else fileName, fontWeight = FontWeight.SemiBold)
-                            Text("기기의 파일을 직접 편집합니다.", color = Color.Gray, fontSize = 13.sp)
-                            Button(onClick = { picker.launch(arrayOf("audio/*", "application/ogg", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                                Icon(Icons.Rounded.Add, null); Spacer(Modifier.width(8.dp)); Text("음악 파일 선택")
-                            }
+        setContent { MusicMagicApp() }
+    }
+}
+
+@Composable
+private fun MusicMagicApp() {
+    val dark = isSystemInDarkTheme()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var originalInfo by remember { mutableStateOf<AudioInfo?>(null) }
+    var fileName by remember { mutableStateOf("") }
+    var title by remember { mutableStateOf("") }
+    var artist by remember { mutableStateOf("") }
+    var album by remember { mutableStateOf("") }
+    var albumArtist by remember { mutableStateOf("") }
+    var genre by remember { mutableStateOf("") }
+    var year by remember { mutableStateOf("") }
+    var track by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("") }
+    var success by remember { mutableStateOf(false) }
+
+    fun applyInfo(info: AudioInfo) {
+        originalInfo = info
+        fileName = info.fileName
+        title = info.title
+        artist = info.artist
+        album = info.album
+        albumArtist = info.albumArtist
+        genre = info.genre
+        year = info.year
+        track = info.track
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        selectedUri = uri
+        busy = true
+        status = ""
+        success = false
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        scope.launch {
+            val info = withContext(Dispatchers.IO) { AudioMetadata.read(context, uri) }
+            applyInfo(info)
+            status = info.error.orEmpty()
+            busy = false
+        }
+    }
+
+    val colors = if (dark) {
+        darkColorScheme(
+            primary = IosBlue,
+            background = DarkBackground,
+            surface = Color(0xFF1C1C1E),
+            surfaceVariant = Color(0xFF2C2C2E),
+        )
+    } else {
+        lightColorScheme(
+            primary = IosBlue,
+            background = LightBackground,
+            surface = Color.White,
+            surfaceVariant = Color(0xFFE5E5EA),
+        )
+    }
+
+    MaterialTheme(colorScheme = colors) {
+        val info = originalInfo
+        val originalExtension = info?.fileName?.substringAfterLast('.', "")?.lowercase().orEmpty()
+        val requestedExtension = fileName.substringAfterLast('.', "").lowercase()
+        val extensionChanged = info != null && requestedExtension != originalExtension
+        val editable = info?.supported == true && selectedUri != null
+
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Spacer(Modifier.height(18.dp))
+
+                Text(
+                    text = "Music Magic",
+                    fontSize = 36.sp,
+                    lineHeight = 40.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "파일 자체의 음악 정보를 바꿔요.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f),
+                    fontSize = 16.sp,
+                )
+
+                FilePickerCard(
+                    info = info,
+                    busy = busy,
+                    onPick = {
+                        picker.launch(
+                            arrayOf(
+                                "audio/*",
+                                "application/ogg",
+                                "application/octet-stream",
+                            )
+                        )
+                    },
+                )
+
+                if (info != null) {
+                    SectionCard(title = "음악 정보", icon = Icons.Rounded.MusicNote) {
+                        EditorField("제목", title, { title = it })
+                        DividerInset()
+                        EditorField("아티스트 · 만든이", artist, { artist = it })
+                        DividerInset()
+                        EditorField("앨범", album, { album = it })
+                        DividerInset()
+                        EditorField("앨범 아티스트", albumArtist, { albumArtist = it })
+                    }
+
+                    SectionCard(title = "세부 정보", icon = Icons.Rounded.Edit) {
+                        EditorField("장르", genre, { genre = it })
+                        DividerInset()
+                        EditorField("연도", year, { year = it })
+                        DividerInset()
+                        EditorField("트랙 번호", track, { track = it })
+                    }
+
+                    SectionCard(title = "파일", icon = Icons.Rounded.AudioFile) {
+                        EditorField("파일명 · 확장자", fileName, { fileName = it })
+                        if (extensionChanged) {
+                            Spacer(Modifier.height(10.dp))
+                            Notice(
+                                text = "확장자 이름만 바뀝니다. 예: MP3 → FLAC으로 적어도 오디오 코덱 자체가 변환되지는 않아요.",
+                                color = IosOrange,
+                            )
                         }
                     }
-                    if (selected != null) {
-                        Text("음악 정보", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Surface(shape = RoundedCornerShape(24.dp), color = Color.White) {
-                            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("제목") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                                OutlinedTextField(value = artist, onValueChange = { artist = it }, label = { Text("아티스트 · 만든이") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                                OutlinedTextField(value = album, onValueChange = { album = it }, label = { Text("앨범") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                                OutlinedTextField(value = fileName, onValueChange = { fileName = it }, label = { Text("파일명") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                            }
-                        }
-                        Button(enabled = !busy && editable, onClick = {
-                            val uri = selected ?: return@Button
+
+                    if (status.isNotBlank()) {
+                        Notice(
+                            text = status,
+                            color = if (success) IosGreen else IosOrange,
+                            success = success,
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            val uri = selectedUri ?: return@Button
                             busy = true
+                            status = ""
+                            success = false
                             scope.launch {
-                                val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    AudioMetadata.save(this@MainActivity, uri, title, artist, album, fileName)
+                                val result = withContext(Dispatchers.IO) {
+                                    AudioMetadata.save(
+                                        context,
+                                        uri,
+                                        AudioEdits(
+                                            fileName = fileName.trim(),
+                                            title = title,
+                                            artist = artist,
+                                            album = album,
+                                            albumArtist = albumArtist,
+                                            genre = genre,
+                                            year = year,
+                                            track = track,
+                                        ),
+                                    )
                                 }
-                                status = result.fold(onSuccess = { "원본 파일에 저장했어요." }, onFailure = { "저장 실패: ${it.message}" })
+                                result.fold(
+                                    onSuccess = { saved ->
+                                        selectedUri = saved.uri
+                                        applyInfo(saved.info)
+                                        success = true
+                                        status = "원본 파일에 저장했어요. 다른 플레이어에서도 이 메타데이터를 읽을 수 있습니다."
+                                    },
+                                    onFailure = { error ->
+                                        success = false
+                                        status = error.message ?: "저장에 실패했습니다."
+                                    },
+                                )
                                 busy = false
                             }
-                        }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(18.dp)) {
-                            Text(if (busy) "저장 중..." else "원본에 저장", fontWeight = FontWeight.Bold)
+                        },
+                        enabled = editable && !busy && fileName.isNotBlank(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(17.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = IosBlue),
+                    ) {
+                        if (busy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                strokeWidth = 2.5.dp,
+                                color = Color.White,
+                            )
+                        } else {
+                            Icon(Icons.Rounded.CheckCircle, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("원본 파일에 저장", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    if (status.isNotEmpty()) Text(status, color = if (status.startsWith("원본")) Color(0xFF168553) else Color(0xFFB45309))
-                    Text("현재 버전: MP3 ID3v2.3 안전 편집 · 기타 형식은 추후 지원", fontSize = 12.sp, color = Color.Gray)
                 }
+
+                SupportedFormatsCard()
+                Spacer(Modifier.height(24.dp))
             }
         }
     }
+}
+
+@Composable
+private fun FilePickerCard(info: AudioInfo?, busy: Boolean, onPick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 0.dp,
+        shadowElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .background(IosBlue.copy(alpha = 0.13f), RoundedCornerShape(15.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (info == null) Icons.Rounded.FolderOpen else Icons.Rounded.MusicNote,
+                        contentDescription = null,
+                        tint = IosBlue,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+                Spacer(Modifier.width(13.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = info?.fileName ?: "음악 파일 선택",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 17.sp,
+                        maxLines = 2,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = if (info == null) {
+                            "MP3, FLAC, M4A, OGG, Opus, WAV 등"
+                        } else {
+                            "${info.format.ifBlank { "AUDIO" }} · ${humanSize(info.sizeBytes)}"
+                        },
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+            Button(
+                onClick = onPick,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(15.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
+                Text(if (info == null) "파일 열기" else "다른 파일 선택")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable Column.() -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.padding(start = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, null, modifier = Modifier.size(17.dp), tint = IosBlue)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+            )
+        }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            shadowElevation = 0.5.dp,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditorField(label: String, value: String, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+    )
+}
+
+@Composable
+private fun DividerInset() {
+    HorizontalDivider(
+        modifier = Modifier.padding(vertical = 5.dp),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+    )
+}
+
+@Composable
+private fun Notice(text: String, color: Color, success: Boolean = false) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = color.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                imageVector = if (success) Icons.Rounded.CheckCircle else Icons.Rounded.Info,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(9.dp))
+            Text(
+                text = text,
+                modifier = Modifier.weight(1f),
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SupportedFormatsCard() {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(modifier = Modifier.padding(15.dp)) {
+            Text("지원 형식", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "MP3 · FLAC · M4A/MP4 · OGG · Opus · WAV · AIFF · WMA · DSF",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "메타데이터 수정은 오디오를 재인코딩하지 않아 음질에 영향을 주지 않습니다.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+            )
+        }
+    }
+}
+
+private fun humanSize(bytes: Long): String = when {
+    bytes <= 0L -> "크기 알 수 없음"
+    bytes < 1024L -> "$bytes B"
+    bytes < 1024L * 1024L -> "%.1f KB".format(bytes / 1024.0)
+    bytes < 1024L * 1024L * 1024L -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
+    else -> "%.2f GB".format(bytes / (1024.0 * 1024.0 * 1024.0))
 }
