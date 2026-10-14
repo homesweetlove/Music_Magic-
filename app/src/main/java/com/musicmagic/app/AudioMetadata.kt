@@ -2,6 +2,7 @@ package com.musicmagic.app
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
@@ -36,6 +37,8 @@ data class AudioEdits(
     val track: String = "",
 )
 
+data class SaveResult(val info: AudioInfo, val uri: Uri)
+
 object AudioMetadata {
     private const val MAX_FILE_BYTES = 1_024L * 1_024L * 1_024L // 1 GiB
 
@@ -45,11 +48,8 @@ object AudioMetadata {
     )
 
     init {
-        // The Android-compatible jaudiotagger fork uses this flag for platform-safe behavior.
         TagOptionSingleton.getInstance().setAndroid(true)
     }
-
-    fun isEditable(context: Context, uri: Uri): Boolean = read(context, uri).supported
 
     fun read(context: Context, uri: Uri): AudioInfo {
         val doc = DocumentFile.fromSingleUri(context, uri)
@@ -111,7 +111,7 @@ object AudioMetadata {
      * Edits a temporary copy first. Only after a successful re-read does it overwrite the
      * user-selected document. A second copy of the original is retained for best-effort recovery.
      */
-    fun save(context: Context, uri: Uri, edits: AudioEdits): Result<AudioInfo> = runCatching {
+    fun save(context: Context, uri: Uri, edits: AudioEdits): Result<SaveResult> = runCatching {
         val doc = DocumentFile.fromSingleUri(context, uri)
             ?: error("파일에 접근할 수 없습니다.")
         val originalName = doc.name ?: error("파일명을 확인할 수 없습니다.")
@@ -139,33 +139,32 @@ object AudioMetadata {
             tag.setField(FieldKey.GENRE, edits.genre)
             tag.setField(FieldKey.YEAR, edits.year)
             tag.setField(FieldKey.TRACK, edits.track)
-            audioFile.tag = tag
+            audioFile.setTag(tag)
             AudioFileIO.write(audioFile)
 
-            // Verify the edited temporary file before touching the original URI.
             val written = AudioFileIO.read(work).tag
                 ?: error("저장 검증 중 태그를 다시 읽을 수 없습니다.")
-            check(written.getFirst(FieldKey.TITLE) == edits.title) { "제목 저장 검증에 실패했습니다." }
-            check(written.getFirst(FieldKey.ARTIST) == edits.artist) { "아티스트 저장 검증에 실패했습니다." }
-            check(written.getFirst(FieldKey.ALBUM) == edits.album) { "앨범 저장 검증에 실패했습니다." }
+            verifyCoreFields(written.getFirst(FieldKey.TITLE), written.getFirst(FieldKey.ARTIST), written.getFirst(FieldKey.ALBUM), edits)
 
+            var outputUri = uri
             try {
                 context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
                     work.inputStream().use { input -> input.copyTo(output) }
                 } ?: error("원본 파일을 쓸 수 없습니다.")
 
-                // Re-read the real document after overwrite. This catches partial provider writes.
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(verify).use { output -> input.copyTo(output) }
                 } ?: error("저장한 파일을 검증할 수 없습니다.")
                 val realTag = AudioFileIO.read(verify).tag
                     ?: error("저장한 파일의 메타데이터를 읽을 수 없습니다.")
-                check(realTag.getFirst(FieldKey.TITLE) == edits.title) { "원본 제목 검증에 실패했습니다." }
-                check(realTag.getFirst(FieldKey.ARTIST) == edits.artist) { "원본 아티스트 검증에 실패했습니다." }
-                check(realTag.getFirst(FieldKey.ALBUM) == edits.album) { "원본 앨범 검증에 실패했습니다." }
+                verifyCoreFields(realTag.getFirst(FieldKey.TITLE), realTag.getFirst(FieldKey.ARTIST), realTag.getFirst(FieldKey.ALBUM), edits)
 
                 if (edits.fileName != originalName) {
-                    check(doc.renameTo(edits.fileName)) { "메타데이터 저장은 성공했지만 파일명 변경에 실패했습니다." }
+                    outputUri = DocumentsContract.renameDocument(
+                        context.contentResolver,
+                        uri,
+                        edits.fileName,
+                    ) ?: error("메타데이터 저장은 성공했지만 파일명 변경에 실패했습니다.")
                 }
             } catch (writeError: Exception) {
                 val restored = runCatching {
@@ -182,8 +181,23 @@ object AudioMetadata {
                 throw writeError
             }
 
-            context.contentResolver.notifyChange(uri, null)
-            read(context, uri).copy(fileName = edits.fileName)
+            context.contentResolver.notifyChange(outputUri, null)
+            SaveResult(
+                info = AudioInfo(
+                    fileName = edits.fileName,
+                    title = edits.title,
+                    artist = edits.artist,
+                    album = edits.album,
+                    albumArtist = edits.albumArtist,
+                    genre = edits.genre,
+                    year = edits.year,
+                    track = edits.track,
+                    format = ext.uppercase(),
+                    sizeBytes = work.length(),
+                    supported = true,
+                ),
+                uri = outputUri,
+            )
         } finally {
             backup.delete()
             work.delete()
@@ -191,13 +205,10 @@ object AudioMetadata {
         }
     }
 
-    /** Rename only. This does not transcode the codec when the extension is changed. */
-    fun renameOnly(context: Context, uri: Uri, requestedName: String): Result<Unit> = runCatching {
-        require(requestedName.isNotBlank()) { "파일명은 비워둘 수 없습니다." }
-        require('/' !in requestedName && '\\' !in requestedName) { "올바른 파일명을 입력하세요." }
-        val doc = DocumentFile.fromSingleUri(context, uri) ?: error("파일에 접근할 수 없습니다.")
-        check(doc.renameTo(requestedName)) { "파일명 변경에 실패했습니다." }
-        context.contentResolver.notifyChange(uri, null)
+    private fun verifyCoreFields(title: String, artist: String, album: String, edits: AudioEdits) {
+        check(title == edits.title) { "제목 저장 검증에 실패했습니다." }
+        check(artist == edits.artist) { "아티스트 저장 검증에 실패했습니다." }
+        check(album == edits.album) { "앨범 저장 검증에 실패했습니다." }
     }
 
     private fun extensionOf(name: String): String =
