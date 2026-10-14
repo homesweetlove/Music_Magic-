@@ -2,7 +2,6 @@ package com.musicmagic.app
 
 import android.content.Context
 import android.net.Uri
-import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -17,7 +16,7 @@ object AudioMetadata {
         return try {
             val bytes = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
             val tags = parse(bytes)
-            AudioInfo(name, tags["TIT2"] ?: "", tags["TPE1"] ?: "", tags["TALB"] ?: "", true)
+            AudioInfo(name, tags["TIT2"] ?: "", tags["TPE1"] ?: "", tags["TALB"] ?: "", bytes.size < 10 || String(bytes, 0, 3, StandardCharsets.ISO_8859_1) != "ID3" || (bytes[3].toInt() == 3 && bytes[5].toInt() == 0))
         } catch (_: Exception) { AudioInfo(name, "", "", "", false) }
     }
 
@@ -29,7 +28,7 @@ object AudioMetadata {
         require('/' !in requestedName && '\\' !in requestedName && requestedName.isNotBlank()) { "올바른 파일명을 입력하세요." }
         val bytes = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         val offset = id3Size(bytes)
-        val newTag = buildTag(title, artist, album)
+        val newTag = buildTagPreservingFrames(bytes, title, artist, album)
         val updated = ByteArrayOutputStream().apply {
             write(newTag)
             write(bytes, offset, bytes.size - offset)
@@ -42,7 +41,7 @@ object AudioMetadata {
                 context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(updated) }
                 val verified = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                 check(verified.contentEquals(updated)) { "저장 검증에 실패했습니다." }
-                if (requestedName != originalName) check(doc.renameTo(requestedName)) { "메타데이터는 저장됐지만 파일명 변경에 실패했습니다." }
+                if (requestedName != originalName) check(doc.renameTo(requestedName)) { "태그 저장은 성공했지만 파일명 변경에 실패했습니다." }
             } catch (error: Exception) {
                 runCatching { context.contentResolver.openOutputStream(uri, "wt")!!.use { output -> backup.inputStream().use { it.copyTo(output) } } }
                 throw error
@@ -82,16 +81,35 @@ object AudioMetadata {
         return result
     }
 
-    private fun buildTag(title: String, artist: String, album: String): ByteArray {
-        val frames = ByteArrayOutputStream()
+    // Keep all unrelated ID3v2.3 frames, including embedded album artwork (APIC).
+    // Reject layouts that cannot be safely round-tripped instead of discarding metadata.
+    private fun buildTagPreservingFrames(data: ByteArray, title: String, artist: String, album: String): ByteArray {
+        val preserved = ByteArrayOutputStream()
+        val existing = id3Size(data)
+        if (existing > 0) {
+            require(data[3].toInt() == 3) { "안전한 보존 편집은 ID3v2.3만 지원합니다." }
+            require((data[5].toInt() and 0xFF) == 0) { "특수 ID3 플래그가 있어 안전하게 수정할 수 없습니다." }
+            var p = 10
+            while (p + 10 <= existing) {
+                if ((p until p + 4).all { data[it].toInt() == 0 }) break
+                val id = String(data, p, 4, StandardCharsets.ISO_8859_1)
+                require(id.matches(Regex("[A-Z0-9]{4}"))) { "지원하지 않는 ID3 프레임입니다." }
+                val length = ByteBuffer.wrap(data, p + 4, 4).int
+                require(length > 0 && p + 10L + length <= existing) { "손상된 ID3 프레임입니다." }
+                val flags = ((data[p + 8].toInt() and 255) shl 8) or (data[p + 9].toInt() and 255)
+                require((flags and 0x00E0) == 0) { "압축 또는 암호화된 ID3 프레임은 편집할 수 없습니다." }
+                if (id !in setOf("TIT2", "TPE1", "TALB")) preserved.write(data, p, 10 + length)
+                p += 10 + length
+            }
+        }
         for ((id, value) in listOf("TIT2" to title, "TPE1" to artist, "TALB" to album)) {
             val payload = byteArrayOf(1) + value.toByteArray(StandardCharsets.UTF_16)
-            frames.write(id.toByteArray(StandardCharsets.US_ASCII))
-            frames.write(ByteBuffer.allocate(4).putInt(payload.size).array())
-            frames.write(byteArrayOf(0, 0))
-            frames.write(payload)
+            preserved.write(id.toByteArray(StandardCharsets.US_ASCII))
+            preserved.write(ByteBuffer.allocate(4).putInt(payload.size).array())
+            preserved.write(byteArrayOf(0, 0))
+            preserved.write(payload)
         }
-        val body = frames.toByteArray()
+        val body = preserved.toByteArray()
         return byteArrayOf(73, 68, 51, 3, 0, 0) + synchsafeEncode(body.size) + body
     }
 
