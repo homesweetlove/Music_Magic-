@@ -118,6 +118,21 @@ private fun MusicMagicApp() {
         artworkBytes = null
     }
 
+    val wavPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { target ->
+        val source = selectedUri
+        if (target != null && source != null) {
+            busy = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) { WavConverter.convert(context, source, target) }
+                result.fold(
+                    onSuccess = { status = "실제 PCM WAV 변환 완료: " + it + " bytes"; success = true },
+                    onFailure = { status = "WAV 변환 실패: " + (it.message ?: "알 수 없는 오류"); success = false }
+                )
+                busy = false
+            }
+        }
+    }
+
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             folderFiles = DocumentFile.fromTreeUri(context, uri)?.listFiles()?.filter { file ->
@@ -341,6 +356,11 @@ private fun MusicMagicApp() {
                     SectionCard(title = "오디오 상세", icon = Icons.Rounded.Info) {
                         Text("길이: ${info.durationSeconds}초 · 비트레이트: ${info.bitRate} · 샘플레이트: ${info.sampleRate}")
                     }
+
+                    Button(onClick = {
+                        val base = info.fileName.substringBeforeLast('.', info.fileName)
+                        wavPicker.launch(base + ".wav")
+                    }, enabled = !busy) { Text("실제 PCM WAV로 변환하여 새 파일 저장") }
 
                     SectionCard(title = "파일", icon = Icons.Rounded.AudioFile) {
                         EditorField("파일명 · 확장자", fileName, { fileName = it })
