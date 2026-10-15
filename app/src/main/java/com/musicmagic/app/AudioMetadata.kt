@@ -20,6 +20,7 @@ data class AudioInfo(
     val genre: String = "",
     val year: String = "",
     val track: String = "",
+    val lyrics: String = "",
     val durationSeconds: Long = 0L,
     val bitRate: String = "",
     val sampleRate: String = "",
@@ -38,6 +39,7 @@ data class AudioEdits(
     val genre: String = "",
     val year: String = "",
     val track: String = "",
+    val lyrics: String = "",
     val artwork: ByteArray? = null,
 )
 
@@ -94,6 +96,7 @@ object AudioMetadata {
                 genre = tag?.getFirst(FieldKey.GENRE).orEmpty(),
                 year = tag?.getFirst(FieldKey.YEAR).orEmpty(),
                 track = tag?.getFirst(FieldKey.TRACK).orEmpty(),
+                lyrics = tag?.getFirst(FieldKey.LYRICS).orEmpty(),
                 durationSeconds = audioFile.audioHeader?.trackLength?.toLong() ?: 0L,
                 bitRate = audioFile.audioHeader?.bitRate.orEmpty(),
                 sampleRate = audioFile.audioHeader?.sampleRate.orEmpty(),
@@ -147,6 +150,7 @@ object AudioMetadata {
             tag.setField(FieldKey.GENRE, edits.genre)
             tag.setField(FieldKey.YEAR, edits.year)
             tag.setField(FieldKey.TRACK, edits.track)
+            tag.setField(FieldKey.LYRICS, edits.lyrics)
             if (edits.artwork != null) {
                 require(edits.artwork.size <= 12 * 1024 * 1024) { "앨범아트는 12MB 이하만 가능합니다." }
                 val artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(writeArtworkTemp(context, edits.artwork))
@@ -206,6 +210,7 @@ object AudioMetadata {
                     genre = edits.genre,
                     year = edits.year,
                     track = edits.track,
+                    lyrics = edits.lyrics,
                     format = ext.uppercase(),
                     sizeBytes = work.length(),
                     supported = true,
@@ -235,6 +240,7 @@ object AudioMetadata {
             FieldKey.GENRE to edits.genre,
             FieldKey.YEAR to edits.year,
             FieldKey.TRACK to edits.track,
+            FieldKey.LYRICS to edits.lyrics,
         )) {
             check(tag.getFirst(field) == expected) { "${field.name} 메타데이터 저장 검증에 실패했습니다." }
         }
