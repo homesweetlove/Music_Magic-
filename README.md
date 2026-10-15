@@ -19,13 +19,18 @@ Music Magic은 앱 안에서만 제목을 바꿔 보이는 플레이어가 아�
 ### ✨ 기능
 
 - 실제 파일 메타데이터 편집: 제목, 아티스트(만든이), 앨범, 앨범 아티스트, 장르, 연도, 트랙 번호
-- 파일명 및 확장자 문자열 변경
+- 동일 확장자 내 파일명 변경 · 아티스트/제목 기반 파일명 정리
 - Android Storage Access Framework 기반 파일 선택/쓰기
 - MP3 · FLAC · M4A/MP4 · OGG · Opus · WAV · AIFF · WMA · DSF 메타데이터 처리
 - 라이트/다크 모드 대응 iOS 스타일 Jetpack Compose UI
-- 로그인 · 서버 · 광고 없이 100% 로컬 처리
+- 오프라인 편집 · 앨범아트 삽입 · 가사 편집 · 음악 미리듣기
+- 폴더 내 다중 파일 일괄 아티스트/앨범 편집 · SHA-256 완전 동일 파일 탐지
+- 변경 전후 미리보기 · 마지막 저장 백업 복원
+- Android 디코더를 이용한 PCM WAV 변환 · AAC M4A 인코딩
+- 선택적 MusicBrainz 곡 정보 검색 (인터넷 연결 필요)
+- 로그인 · 자체 서버 · 광고 없음
 
-> **확장자 변경은 파일명 변경입니다.** `song.mp3`를 `song.flac`으로 바꿔도 코덱을 FLAC으로 재인코딩하지 않습니다. 메타데이터 수정 자체도 오디오 스트림을 재인코딩하지 않습니다.
+> **확장자만 바꾸는 저장은 차단합니다.** 실제 변환은 별도의 WAV/M4A 내보내기에서 실행됩니다. MP3 인코딩과 FLAC 출력은 아직 제공하지 않습니다. 일부 코덱·기기에서는 Android 하드웨어/소프트웨어 인코더 지원에 따라 변환이 실패할 수 있습니다.
 
 ### 🛡️ 원본 덮어쓰기 안전장치
 
@@ -39,12 +44,15 @@ Android 문서 제공자(SAF)의 동작은 제조사·클라우드 서비스마�
 
 로컬 빌드 환경은 JDK 17, Android SDK 35, Gradle 8.9 기준입니다. Android Studio에서 저장소를 열고 Gradle Sync 후 실행할 수 있습니다.
 
-### ✅ v1.0.0 상태
+### ✅ 구현 상태
 
 - CI Android debug APK 빌드 성공
 - 메타데이터 엔진: `jaudiotagger-android`
 - 원본 덮어쓰기 전/후 검증 및 best-effort 복구 구현
-- 파일명/확장자 rename 구현
+- 동일 확장자 파일명 변경 및 PCM WAV/AAC M4A 내보내기 구현
+- 온라인 MusicBrainz 검색은 명시적으로 실행할 때만 사용
+- 마지막 원본 백업은 앱 내부에 한 건 보존; 일괄 편집은 파일별 마지막 저장만 실행 취소 가능
+- SHA-256 중복 탐지는 오디오 유사도가 아닌 파일 바이트 완전 동일성 비교
 - 실기기별 SAF 및 각 플레이어 호환성은 실제 기기 테스트가 추가로 필요
 
 ---
@@ -56,13 +64,17 @@ Music Magic edits **metadata embedded in the actual audio file** rather than sto
 ### Features
 
 - Edit title, artist, album, album artist, genre, year and track number
-- Rename file names and filename extensions
+- Rename files while preserving their real audio extension
 - Metadata handling for MP3, FLAC, M4A/MP4, OGG, Opus, WAV, AIFF, WMA and DSF
 - Android Storage Access Framework support
 - iOS-inspired Jetpack Compose UI with light/dark mode
-- Fully local: no login, backend or ads
+- Cover art, embedded lyrics, preview playback, batch artist/album editing, exact-file SHA-256 duplicate scan
+- Undo last save and preview metadata changes
+- Export decoded PCM WAV or AAC M4A using Android platform codecs
+- Optional MusicBrainz metadata lookup (internet required)
+- Local metadata editing; no login, backend or ads
 
-> Changing a filename extension does **not** transcode the audio codec. Metadata editing also does not re-encode the audio stream.
+> Extension-only changes are rejected. Actual conversion is available for WAV and AAC M4A export. MP3 encoding and FLAC export are not implemented. Codec support varies by Android device.
 
 ### Safe overwrite strategy
 
@@ -72,7 +84,7 @@ Provider behavior varies across Android devices and cloud document providers. Ba
 
 ### Build
 
-The `main` branch is built by GitHub Actions with JDK 17 / Android SDK 35 / Gradle 8.9. A signed debug APK is uploaded as the `music-magic-debug` workflow artifact.
+The `main` branch is built by GitHub Actions with JDK 17 / Android SDK 35 / Gradle 8.9. A debug-signed APK is uploaded as the `music-magic-debug` workflow artifact.
 
 ---
 
