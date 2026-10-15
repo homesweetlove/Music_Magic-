@@ -105,6 +105,7 @@ class LiquidCarouselTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription("다음 카드").assertIsNotEnabled()
         assertEquals(emptyList<String>(), actions)
+        compose.waitUntil(timeoutMillis = 3000) { settled.isNotEmpty() }
         assertEquals(listOf("b"), settled)
         compose.onNodeWithContentDescription("새벽의 산책, 정보 편집").performClick()
         assertEquals(listOf("b"), actions)

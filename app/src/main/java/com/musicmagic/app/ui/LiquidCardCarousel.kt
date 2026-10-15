@@ -45,7 +45,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -141,46 +140,25 @@ fun LiquidCardCarousel(
     val scope = rememberCoroutineScope()
     val latestItems by rememberUpdatedState(items)
     val latestSettled by rememberUpdatedState(onSettled)
-    var navigationSerial by remember { mutableIntStateOf(0) }
     var navigating by remember { mutableStateOf(false) }
 
-    // The first snapshot is a baseline, not an event. Tracking both scroll activity and an
-    // explicit navigation serial also covers scrollToPage when animations are disabled.
+    // PagerState owns snap completion (including pixel rounding). Observe its settled
+    // page rather than imposing a second subpixel alignment threshold that can reject
+    // a valid native snap and prevent the next artwork request.
     LaunchedEffect(pager, ids) {
         var lastId = latestItems.getOrNull(pager.settledPage)?.id
-        var observedScroll = false
-        var consumedSerial = navigationSerial
-        // A replacement during a gesture establishes a fresh baseline after that gesture.
         var ignoreCurrentScroll = pager.isScrollInProgress || navigating
-        snapshotFlow {
-            val stride = pager.layoutInfo.pageSize + pager.layoutInfo.pageSpacing
-            LiquidSettlementSample(
-                scrolling = pager.isScrollInProgress || navigating,
-                page = pager.settledPage,
-                serial = navigationSerial,
-                aligned = abs(pager.currentPageOffsetFraction) * stride <= 0.5f,
-            )
-        }.collect { (scrolling, page, serial, aligned) ->
+        snapshotFlow { pager.settledPage to (pager.isScrollInProgress || navigating) }.collect { (page, scrolling) ->
             if (ignoreCurrentScroll) {
-                if (!scrolling && aligned) {
+                if (!scrolling) {
                     lastId = latestItems.getOrNull(page)?.id
-                    consumedSerial = serial
                     ignoreCurrentScroll = false
                 }
-            } else if (scrolling) {
-                observedScroll = true
-            } else if (aligned) {
-                // Cancellation can leave an idle pager between snap positions. Keep
-                // the pending movement until a genuinely aligned page is reached.
+            } else if (!scrolling) {
                 val item = latestItems.getOrNull(page)
-                val navigated = observedScroll || serial != consumedSerial
-                observedScroll = false
-                consumedSerial = serial
-                if (navigated && item != null && item.id != lastId) {
+                if (item != null && item.id != lastId) {
                     lastId = item.id
                     latestSettled?.invoke(item)
-                } else if (!navigated) {
-                    lastId = item?.id
                 }
             }
         }
@@ -201,7 +179,6 @@ fun LiquidCardCarousel(
                         } else {
                             pager.scrollToPage(target)
                         }
-                        navigationSerial++
                     } finally {
                         navigating = false
                     }
@@ -297,13 +274,6 @@ fun LiquidCardCarousel(
         }
     }
 }
-
-private data class LiquidSettlementSample(
-    val scrolling: Boolean,
-    val page: Int,
-    val serial: Int,
-    val aligned: Boolean,
-)
 
 @Composable
 private fun LiquidCarouselCard(
