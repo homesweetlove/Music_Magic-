@@ -302,6 +302,24 @@ private fun MusicMagicApp() {
                         EditorField("앨범 아티스트", albumArtist, { albumArtist = it })
                     }
 
+                    Button(onClick = {
+                        busy = true
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) { MusicBrainzLookup.search(title, artist) }
+                            result.fold(
+                                onSuccess = { tags ->
+                                    title = tags.title
+                                    artist = tags.artist
+                                    if (tags.album.isNotBlank()) album = tags.album
+                                    status = "MusicBrainz 검색 결과를 입력했습니다. 확인 후 저장하세요."
+                                    success = true
+                                },
+                                onFailure = { status = it.message ?: "온라인 검색 실패"; success = false }
+                            )
+                            busy = false
+                        }
+                    }, enabled = !busy && title.isNotBlank()) { Text("MusicBrainz에서 곡 정보 자동 검색") }
+
                     SectionCard(title = "세부 정보", icon = Icons.Rounded.Edit) {
                         EditorField("장르", genre, { genre = it })
                         DividerInset()
