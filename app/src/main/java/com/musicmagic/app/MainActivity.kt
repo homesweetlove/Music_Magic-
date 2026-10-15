@@ -4,6 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.media.MediaPlayer
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.io.ByteArrayOutputStream
 import androidx.documentfile.provider.DocumentFile
 import java.security.MessageDigest
 import androidx.compose.runtime.DisposableEffect
@@ -172,8 +175,20 @@ private fun MusicMagicApp() {
         if (uri != null) scope.launch {
             val bytes = withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() }
             if (bytes != null && bytes.size <= 12 * 1024 * 1024) {
-                artworkBytes = bytes
-                status = "앨범아트를 선택했어요. 저장하면 음악 파일에 기록됩니다."
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bitmap != null) {
+                    val maxSide = 1000
+                    val ratio = minOf(1f, maxSide.toFloat() / maxOf(bitmap.width, bitmap.height))
+                    val resized = if (ratio < 1f) Bitmap.createScaledBitmap(bitmap,
+                        (bitmap.width * ratio).toInt().coerceAtLeast(1),
+                        (bitmap.height * ratio).toInt().coerceAtLeast(1), true) else bitmap
+                    val output = ByteArrayOutputStream()
+                    resized.compress(Bitmap.CompressFormat.JPEG, 90, output)
+                    artworkBytes = output.toByteArray()
+                    if (resized !== bitmap) resized.recycle()
+                    bitmap.recycle()
+                    status = "앨범아트를 최대 1000px JPEG로 최적화했어요. 저장하면 음악 파일에 기록됩니다."
+                } else status = "이미지를 디코딩할 수 없습니다."
             } else status = "이미지를 읽을 수 없거나 12MB를 초과합니다."
         }
     }
