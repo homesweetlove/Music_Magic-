@@ -59,7 +59,7 @@ object WavConverter {
                             val outputFormat = codec.outputFormat
                             sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                             channels = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                            val pcmEncoding = outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
+                            val pcmEncoding = if (outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING) else android.media.AudioFormat.ENCODING_PCM_16BIT
                             require(pcmEncoding == android.media.AudioFormat.ENCODING_PCM_16BIT) {
                                 "16-bit PCM으로 디코딩할 수 없는 형식입니다."
                             }
