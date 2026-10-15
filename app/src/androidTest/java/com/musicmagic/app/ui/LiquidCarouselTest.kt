@@ -69,6 +69,32 @@ class LiquidCarouselTest {
         assertEquals("new.flac", updated.fileName)
     }
 
+    @Test fun pickedArtworkUsesBoundedDecodeAndJpegOutput() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val input = File.createTempFile("cover-test", ".png", context.cacheDir)
+        try {
+            val source = Bitmap.createBitmap(2400, 1600, Bitmap.Config.ARGB_8888)
+            input.outputStream().use { source.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            source.recycle()
+            val result = LibraryMedia.prepareArtwork(context, Uri.fromFile(input)).getOrThrow()
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(result, 0, result.size, bounds)
+            assertEquals("image/jpeg", bounds.outMimeType)
+            assertEquals(1000, bounds.outWidth)
+            assertTrue(bounds.outHeight <= 1000)
+            input.writeText("not an image")
+            assertTrue(LibraryMedia.prepareArtwork(context, Uri.fromFile(input)).isFailure)
+            input.outputStream().use { out ->
+                val chunk = ByteArray(1024 * 1024)
+                repeat(12) { out.write(chunk) }
+                out.write(0)
+            }
+            val oversized = LibraryMedia.prepareArtwork(context, Uri.fromFile(input))
+            assertTrue(oversized.isFailure)
+            assertTrue(oversized.exceptionOrNull()?.message.orEmpty().contains("12MB"))
+        } finally { input.delete() }
+    }
+
     @Test fun buttonsAndSwipeNavigateWithoutOpeningEditor() {
         val actions = mutableListOf<String>()
         val settled = mutableListOf<String>()

@@ -13,6 +13,7 @@ import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import com.musicmagic.app.AudioInfo
+import java.io.ByteArrayOutputStream
 
 /** Lightweight browsing data; opening the editor still uses the verified metadata engine. */
 data class LibraryTrack(
@@ -28,6 +29,41 @@ data class LibraryTrack(
 data class CoverArt(val bitmap: Bitmap?, val accent: Color)
 
 object LibraryMedia {
+    /** Bounded input and sampled decode for artwork chosen through SAF. Call on Dispatchers.IO. */
+    fun prepareArtwork(context: Context, uri: Uri): Result<ByteArray> = runCatching {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                require(out.size() + count <= 12 * 1024 * 1024) { "이미지가 12MB를 초과합니다." }
+                out.write(buffer, 0, count)
+            }
+            out.toByteArray()
+        } ?: error("이미지를 읽을 수 없습니다.")
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "이미지를 디코딩할 수 없습니다." }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2000) sample *= 2
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: error("이미지를 디코딩할 수 없습니다.")
+        var resized = bitmap
+        try {
+            val ratio = minOf(1f, 1000f / maxOf(bitmap.width, bitmap.height))
+            if (ratio < 1f) resized = Bitmap.createScaledBitmap(bitmap,
+                (bitmap.width * ratio).toInt().coerceAtLeast(1), (bitmap.height * ratio).toInt().coerceAtLeast(1), true)
+            ByteArrayOutputStream().use { output ->
+                check(resized.compress(Bitmap.CompressFormat.JPEG, 90, output)) { "이미지 최적화에 실패했습니다." }
+                output.toByteArray()
+            }
+        } finally {
+            if (resized !== bitmap) resized.recycle()
+            bitmap.recycle()
+        }
+    }
+
     fun sameDocument(first: Uri, second: Uri): Boolean = first == second ||
         (first.authority == second.authority && runCatching {
             DocumentsContract.getDocumentId(first) == DocumentsContract.getDocumentId(second)
