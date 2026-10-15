@@ -150,9 +150,20 @@ private fun MusicMagicApp() {
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
-            folderFiles = DocumentFile.fromTreeUri(context, uri)?.listFiles()?.filter { file ->
-                file.isFile && file.name?.substringAfterLast('.', "")?.lowercase() in setOf("mp3","flac","m4a","ogg","opus","wav","aiff","wma","dsf")
-            }?.map { it.uri }.orEmpty()
+            val queue = ArrayDeque<DocumentFile>()
+            DocumentFile.fromTreeUri(context, uri)?.let { queue.add(it) }
+            val found = mutableListOf<Uri>()
+            while (queue.isNotEmpty() && found.size < 500) {
+                val directory = queue.removeFirst()
+                directory.listFiles().forEach { file ->
+                    if (file.isDirectory) queue.add(file)
+                    else if (file.isFile && file.name?.substringAfterLast('.', "")?.lowercase() in
+                        setOf("mp3", "flac", "m4a", "ogg", "opus", "wav", "aiff", "wma", "dsf")) {
+                        found.add(file.uri)
+                    }
+                }
+            }
+            folderFiles = found
             batchStatus = "${folderFiles.size}개 음악 파일을 찾았어요."
         }
     }
