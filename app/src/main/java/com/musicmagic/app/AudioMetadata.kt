@@ -231,7 +231,10 @@ object AudioMetadata {
         }
     }
 
-    fun undoLast(context: Context): Result<AudioInfo> = runCatching {
+    fun undoLast(context: Context): Result<AudioInfo> = undoLastWithUri(context).map { it.info }
+
+    /** Providers may return a different document ID when restoring the previous filename. */
+    fun undoLastWithUri(context: Context): Result<SaveResult> = runCatching {
         val prefs = context.getSharedPreferences("musicmagic", Context.MODE_PRIVATE)
         val uri = Uri.parse(prefs.getString("undo_uri", null) ?: error("복원할 이전 버전이 없습니다."))
         val backup = File(context.filesDir, UNDO_FILE)
@@ -240,16 +243,22 @@ object AudioMetadata {
         resolver.openOutputStream(uri, "wt")?.use { out ->
             backup.inputStream().use { it.copyTo(out) }
         } ?: error("이 파일에 복원 내용을 쓸 수 없습니다.")
+        var restoredUri = uri
         val oldName = prefs.getString("undo_name", null)
         if (!oldName.isNullOrBlank()) {
             val currentName = DocumentFile.fromSingleUri(context, uri)?.name
-            if (currentName != oldName) runCatching { DocumentsContract.renameDocument(resolver, uri, oldName) }
+            if (currentName != oldName) {
+                runCatching { DocumentsContract.renameDocument(resolver, uri, oldName) }.getOrNull()?.let {
+                    restoredUri = it
+                    prefs.edit().putString("undo_uri", it.toString()).apply()
+                }
+            }
         }
-        val restored = read(context, uri)
+        val restored = read(context, restoredUri)
         check(restored.supported) { "복원 후 파일 검증에 실패했습니다." }
         prefs.edit().remove("undo_uri").remove("undo_name").apply()
         backup.delete()
-        restored
+        SaveResult(restored, restoredUri)
     }
 
     private fun writeArtworkTemp(context: Context, bytes: ByteArray): File {

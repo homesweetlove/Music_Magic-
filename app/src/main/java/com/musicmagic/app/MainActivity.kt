@@ -10,6 +10,16 @@ import java.io.ByteArrayOutputStream
 import androidx.documentfile.provider.DocumentFile
 import java.security.MessageDigest
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.musicmagic.app.library.LibraryMedia
+import com.musicmagic.app.library.LibraryTrack
+import com.musicmagic.app.ui.AudioComparison
+import com.musicmagic.app.ui.AudioComparisonCarousel
+import com.musicmagic.app.ui.MusicLibraryCarousel
+import com.musicmagic.app.ui.SelectedMusicCarousel
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -97,17 +107,52 @@ private fun MusicMagicApp() {
     var track by remember { mutableStateOf("") }
     var lyrics by remember { mutableStateOf("") }
     var folderFiles by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var libraryTracks by remember { mutableStateOf<List<LibraryTrack>>(emptyList()) }
+    var libraryRevision by remember { mutableIntStateOf(0) }
+    var comparison by remember { mutableStateOf<AudioComparison?>(null) }
+    var exportSource by remember { mutableStateOf<Pair<Uri, AudioInfo>?>(null) }
     var batchStatus by remember { mutableStateOf("") }
     var batchArtist by remember { mutableStateOf("") }
     var batchAlbum by remember { mutableStateOf("") }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
-    DisposableEffect(Unit) { onDispose { player?.release() } }
+    val lifecycle = (context as ComponentActivity).lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                player?.release()
+                player = null
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer); player?.release(); player = null }
+    }
     var artworkBytes by remember { mutableStateOf<ByteArray?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var success by remember { mutableStateOf(false) }
 
+    fun preview(uri: Uri) {
+        player?.release()
+        val candidate = MediaPlayer()
+        player = candidate
+        candidate.setOnPreparedListener {
+            if (player === it) it.start()
+        }
+        candidate.setOnCompletionListener { if (player === it) { it.release(); player = null } }
+        candidate.setOnErrorListener { media, _, _ ->
+            if (player === media) { media.release(); player = null; status = "이 파일을 재생할 수 없습니다." }
+            true
+        }
+        runCatching { candidate.setDataSource(context, uri); candidate.prepareAsync() }.onFailure {
+            candidate.release()
+            if (player === candidate) player = null
+            status = "미리듣기 실패: ${it.message}"
+        }
+    }
+
     fun applyInfo(info: AudioInfo) {
+        player?.release()
+        player = null
         originalInfo = info
         fileName = info.fileName
         title = info.title
@@ -121,14 +166,32 @@ private fun MusicMagicApp() {
         artworkBytes = null
     }
 
+    fun updateLibrary(oldUri: Uri, saved: SaveResult) {
+        libraryTracks = libraryTracks.map { entry ->
+            if (LibraryMedia.sameDocument(entry.uri, oldUri)) LibraryMedia.updated(entry, saved.uri, saved.info) else entry
+        }
+        folderFiles = folderFiles.map { if (LibraryMedia.sameDocument(it, oldUri)) saved.uri else it }.distinct()
+    }
+
     val m4aPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mp4")) { target ->
-        val source = selectedUri
-        if (target != null && source != null) {
+        val pending = exportSource
+        exportSource = null
+        if (target != null && pending != null) {
+            val (source, sourceInfo) = pending
+            if (source == target) {
+                status = "원본과 다른 새 파일로 내보내세요."
+                success = false
+                return@rememberLauncherForActivityResult
+            }
             busy = true
             scope.launch {
                 val result = withContext(Dispatchers.IO) { M4aConverter.convert(context, source, target) }
                 result.fold(
-                    onSuccess = { status = "AAC M4A 변환 완료: " + it + " bytes"; success = true },
+                    onSuccess = {
+                        comparison = AudioComparison(source, target, sourceInfo.title.ifBlank { sourceInfo.fileName },
+                            "${sourceInfo.format} · ${sourceInfo.sampleRate} Hz", "AAC M4A · $it bytes")
+                        status = "AAC M4A 변환 완료: $it bytes"; success = true
+                    },
                     onFailure = { status = "M4A 변환 실패: " + (it.message ?: "알 수 없는 오류"); success = false }
                 )
                 busy = false
@@ -137,13 +200,24 @@ private fun MusicMagicApp() {
     }
 
     val wavPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { target ->
-        val source = selectedUri
-        if (target != null && source != null) {
+        val pending = exportSource
+        exportSource = null
+        if (target != null && pending != null) {
+            val (source, sourceInfo) = pending
+            if (source == target) {
+                status = "원본과 다른 새 파일로 내보내세요."
+                success = false
+                return@rememberLauncherForActivityResult
+            }
             busy = true
             scope.launch {
                 val result = withContext(Dispatchers.IO) { WavConverter.convert(context, source, target) }
                 result.fold(
-                    onSuccess = { status = "실제 PCM WAV 변환 완료: " + it + " bytes"; success = true },
+                    onSuccess = {
+                        comparison = AudioComparison(source, target, sourceInfo.title.ifBlank { sourceInfo.fileName },
+                            "${sourceInfo.format} · ${sourceInfo.sampleRate} Hz", "PCM WAV · $it bytes")
+                        status = "실제 PCM WAV 변환 완료: $it bytes"; success = true
+                    },
                     onFailure = { status = "WAV 변환 실패: " + (it.message ?: "알 수 없는 오류"); success = false }
                 )
                 busy = false
@@ -153,21 +227,21 @@ private fun MusicMagicApp() {
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
-            val queue = ArrayDeque<DocumentFile>()
-            DocumentFile.fromTreeUri(context, uri)?.let { queue.add(it) }
-            val found = mutableListOf<Uri>()
-            while (queue.isNotEmpty() && found.size < 500) {
-                val directory = queue.removeFirst()
-                directory.listFiles().forEach { file ->
-                    if (file.isDirectory) queue.add(file)
-                    else if (file.isFile && file.name?.substringAfterLast('.', "")?.lowercase() in
-                        setOf("mp3", "flac", "m4a", "ogg", "opus", "wav", "aiff", "wma", "dsf")) {
-                        found.add(file.uri)
-                    }
+            runCatching { context.contentResolver.takePersistableUriPermission(uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+            busy = true
+            batchStatus = "음악 폴더를 읽는 중…"
+            scope.launch {
+                val result = runCatching {
+                    withContext(Dispatchers.IO) { LibraryMedia.scan(context, uri) { /* bounded background scan */ } }
                 }
+                result.fold(onSuccess = { tracks ->
+                    libraryTracks = tracks
+                    folderFiles = tracks.map { it.uri }
+                    batchStatus = "${tracks.size}개 음악 파일을 찾았어요. (최대 500곡)"
+                }, onFailure = { batchStatus = "폴더를 읽을 수 없습니다: ${it.message}" })
+                busy = false
             }
-            folderFiles = found
-            batchStatus = "${folderFiles.size}개 음악 파일을 찾았어요."
         }
     }
 
@@ -196,6 +270,7 @@ private fun MusicMagicApp() {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         selectedUri = uri
+        comparison = null
         busy = true
         status = ""
         success = false
@@ -240,6 +315,7 @@ private fun MusicMagicApp() {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .safeDrawingPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -258,47 +334,58 @@ private fun MusicMagicApp() {
                     fontSize = 16.sp,
                 )
 
-                SectionCard(title = "폴더 · 일괄 편집", icon = Icons.Rounded.FolderOpen) {
-                    Button(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
-                    if (folderFiles.isNotEmpty()) {
-                        Text("음악 라이브러리 · ${folderFiles.size}곡")
-                        val groups = folderFiles.groupBy { uri ->
-                            DocumentFile.fromSingleUri(context, uri)?.name?.substringBefore(" - ") ?: "기타"
-                        }
-                        groups.toSortedMap().forEach { (group, items) ->
-                            Text(group + " · " + items.size + "곡", fontWeight = FontWeight.SemiBold)
-                            items.take(12).forEach { uri ->
-                                Button(onClick = {
-                                    selectedUri = uri
-                                    busy = true
-                                    scope.launch {
-                                        val loaded = withContext(Dispatchers.IO) { AudioMetadata.read(context, uri) }
-                                        applyInfo(loaded)
-                                        busy = false
-                                    }
-                                }) { Text(DocumentFile.fromSingleUri(context, uri)?.name ?: "음악 파일") }
+                if (libraryTracks.isNotEmpty()) {
+                    MusicLibraryCarousel(libraryTracks, busy, libraryRevision, onSelect = { uri ->
+                        if (!busy) {
+                            selectedUri = uri
+                            comparison = null
+                            busy = true
+                            scope.launch {
+                                val loaded = withContext(Dispatchers.IO) { AudioMetadata.read(context, uri) }
+                                applyInfo(loaded)
+                                status = loaded.error.orEmpty()
+                                busy = false
                             }
                         }
-                    }
+                    })
+                }
+
+                SectionCard(title = "폴더 · 일괄 편집", icon = Icons.Rounded.FolderOpen) {
+                    Button(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
                     Text("${folderFiles.size}곡 선택됨")
                     EditorField("일괄 아티스트 (빈칸은 유지)", batchArtist, { batchArtist = it })
                     EditorField("일괄 앨범 (빈칸은 유지)", batchAlbum, { batchAlbum = it })
                     Button(onClick = {
                         busy = true
                         scope.launch {
-                            batchStatus = withContext(Dispatchers.IO) {
+                            val (message, savedFiles) = withContext(Dispatchers.IO) {
                                 var ok = 0
                                 val errors = mutableListOf<String>()
+                                val savedFiles = mutableListOf<Pair<Uri, SaveResult>>()
                                 for (uri in folderFiles) {
                                     val info = AudioMetadata.read(context, uri)
                                     if (!info.supported) { errors.add(info.fileName); continue }
                                     val edits = AudioEdits(info.fileName, info.title,
                                         batchArtist.ifBlank { info.artist }, batchAlbum.ifBlank { info.album },
                                         info.albumArtist, info.genre, info.year, info.track, info.lyrics)
-                                    if (AudioMetadata.save(context, uri, edits).isSuccess) ok++ else errors.add(info.fileName)
+                                    AudioMetadata.save(context, uri, edits).fold(onSuccess = {
+                                        ok++; savedFiles.add(uri to it)
+                                    }, onFailure = { errors.add(info.fileName) })
                                 }
-                                "$" + "{ok}/" + folderFiles.size + "곡 저장 성공" + if (errors.isNotEmpty()) " · 실패: " + errors.take(5).joinToString() else ""
+                                ("$ok/${folderFiles.size}곡 저장 성공" + if (errors.isNotEmpty()) " · 실패: " + errors.take(5).joinToString() else "") to savedFiles
                             }
+                            batchStatus = message
+                            savedFiles.forEach { (old, saved) ->
+                                updateLibrary(old, saved)
+                                if (selectedUri?.let { LibraryMedia.sameDocument(it, old) } == true) {
+                                    selectedUri = saved.uri
+                                    originalInfo = saved.info
+                                    if (batchArtist.isNotBlank()) artist = saved.info.artist
+                                    if (batchAlbum.isNotBlank()) album = saved.info.album
+                                }
+                            }
+                            libraryRevision++
+                            comparison = null
                             busy = false
                         }
                     }, enabled = !busy && folderFiles.isNotEmpty() && (batchArtist.isNotBlank() || batchAlbum.isNotBlank())) { Text("선택 폴더 일괄 저장") }
@@ -327,12 +414,29 @@ private fun MusicMagicApp() {
                     if (batchStatus.isNotBlank()) Text(batchStatus)
                 }
 
+                comparison?.let { result ->
+                    androidx.compose.runtime.key(result) {
+                        AudioComparisonCarousel(result, busy, libraryRevision, onPlay = ::preview)
+                    }
+                }
+
                 Button(onClick = {
                     busy = true
                     scope.launch {
-                        val result = withContext(Dispatchers.IO) { AudioMetadata.undoLast(context) }
+                        val oldUri = context.getSharedPreferences("musicmagic", android.content.Context.MODE_PRIVATE)
+                            .getString("undo_uri", null)?.let(Uri::parse)
+                        val result = withContext(Dispatchers.IO) { AudioMetadata.undoLastWithUri(context) }
                         result.fold(
-                            onSuccess = { info -> status = "마지막 수정 이전 상태로 복원했습니다: " + info.fileName; success = true },
+                            onSuccess = { saved ->
+                                oldUri?.let { updateLibrary(it, saved) }
+                                if (selectedUri?.let { oldUri != null && LibraryMedia.sameDocument(it, oldUri) } == true) {
+                                    selectedUri = saved.uri
+                                    applyInfo(saved.info)
+                                }
+                                libraryRevision++
+                                comparison = null
+                                status = "마지막 수정 이전 상태로 복원했습니다: " + saved.info.fileName; success = true
+                            },
                             onFailure = { status = it.message ?: "복원에 실패했습니다."; success = false }
                         )
                         busy = false
@@ -354,20 +458,16 @@ private fun MusicMagicApp() {
                 )
 
                 if (info != null) {
+                    selectedUri?.let { uri ->
+                        androidx.compose.runtime.key(uri) {
+                            SelectedMusicCarousel(uri, info, artworkBytes, libraryRevision, busy,
+                                onArt = { artPicker.launch("image/*") }, onPlay = { preview(uri) })
+                        }
+                    }
                     Button(onClick = {
-                        val uri = selectedUri ?: return@Button
-                        player?.release()
-                        player = runCatching {
-                            MediaPlayer().apply {
-                                context.contentResolver.openAssetFileDescriptor(uri, "r")!!.use { afd ->
-                                    setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                                }
-                                prepare()
-                                start()
-                            }
-                        }.onFailure { status = "미리듣기 실패: ${it.message}" }.getOrNull()
+                        selectedUri?.let(::preview)
                     }, enabled = !busy) { Text("▶ 음악 미리듣기") }
-                    Button(onClick = { player?.stop(); player?.release(); player = null }, enabled = player != null) { Text("■ 재생 정지") }
+                    Button(onClick = { player?.release(); player = null }, enabled = player != null) { Text("■ 재생 정지") }
                     SectionCard(title = "음악 정보", icon = Icons.Rounded.MusicNote) {
                         EditorField("제목", title, { title = it })
                         DividerInset()
@@ -441,11 +541,13 @@ private fun MusicMagicApp() {
                     }
 
                     Button(onClick = {
+                        exportSource = selectedUri?.let { it to info }
                         val base = info.fileName.substringBeforeLast('.', info.fileName)
                         wavPicker.launch(base + ".wav")
                     }, enabled = !busy) { Text("실제 PCM WAV로 변환하여 새 파일 저장") }
 
                     Button(onClick = {
+                        exportSource = selectedUri?.let { it to info }
                         m4aPicker.launch(info.fileName.substringBeforeLast('.', info.fileName) + ".m4a")
                     }, enabled = !busy) { Text("AAC M4A로 실제 인코딩하여 새 파일 저장") }
 
@@ -521,6 +623,9 @@ private fun MusicMagicApp() {
                                     onSuccess = { saved ->
                                         selectedUri = saved.uri
                                         applyInfo(saved.info)
+                                        comparison = null
+                                        libraryRevision++
+                                        updateLibrary(uri, saved)
                                         success = true
                                         status = "원본 파일에 저장했어요. 다른 플레이어에서도 이 메타데이터를 읽을 수 있습니다."
                                     },
