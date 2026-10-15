@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.media.MediaPlayer
+import androidx.compose.runtime.DisposableEffect
+import android.media.MediaPlayer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -89,6 +91,8 @@ private fun MusicMagicApp() {
     var genre by remember { mutableStateOf("") }
     var year by remember { mutableStateOf("") }
     var track by remember { mutableStateOf("") }
+    var player by remember { mutableStateOf<MediaPlayer?>(null) }
+    DisposableEffect(Unit) { onDispose { player?.release() } }
     var artworkBytes by remember { mutableStateOf<ByteArray?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
@@ -197,6 +201,20 @@ private fun MusicMagicApp() {
                 )
 
                 if (info != null) {
+                    Button(onClick = {
+                        val uri = selectedUri ?: return@Button
+                        player?.release()
+                        player = runCatching {
+                            MediaPlayer().apply {
+                                context.contentResolver.openAssetFileDescriptor(uri, "r")!!.use { afd ->
+                                    setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                                }
+                                prepare()
+                                start()
+                            }
+                        }.onFailure { status = "미리듣기 실패: ${it.message}" }.getOrNull()
+                    }, enabled = !busy) { Text("▶ 음악 미리듣기") }
+                    Button(onClick = { player?.stop(); player?.release(); player = null }, enabled = player != null) { Text("■ 재생 정지") }
                     SectionCard(title = "음악 정보", icon = Icons.Rounded.MusicNote) {
                         EditorField("제목", title, { title = it })
                         DividerInset()
