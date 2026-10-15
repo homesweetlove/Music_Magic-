@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.media.MediaPlayer
+import androidx.documentfile.provider.DocumentFile
+import java.security.MessageDigest
 import androidx.compose.runtime.DisposableEffect
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -90,6 +92,10 @@ private fun MusicMagicApp() {
     var genre by remember { mutableStateOf("") }
     var year by remember { mutableStateOf("") }
     var track by remember { mutableStateOf("") }
+    var folderFiles by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var batchStatus by remember { mutableStateOf("") }
+    var batchArtist by remember { mutableStateOf("") }
+    var batchAlbum by remember { mutableStateOf("") }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     DisposableEffect(Unit) { onDispose { player?.release() } }
     var artworkBytes by remember { mutableStateOf<ByteArray?>(null) }
@@ -108,6 +114,15 @@ private fun MusicMagicApp() {
         year = info.year
         track = info.track
         artworkBytes = null
+    }
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            folderFiles = DocumentFile.fromTreeUri(context, uri)?.listFiles()?.filter { file ->
+                file.isFile && file.name?.substringAfterLast('.', "")?.lowercase() in setOf("mp3","flac","m4a","ogg","opus","wav","aiff","wma","dsf")
+            }?.map { it.uri }.orEmpty()
+            batchStatus = "${folderFiles.size}개 음악 파일을 찾았어요."
+        }
     }
 
     val artPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -184,6 +199,55 @@ private fun MusicMagicApp() {
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f),
                     fontSize = 16.sp,
                 )
+
+                SectionCard(title = "폴더 · 일괄 편집", icon = Icons.Rounded.FolderOpen) {
+                    Button(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
+                    Text("${folderFiles.size}곡 선택됨")
+                    EditorField("일괄 아티스트 (빈칸은 유지)", batchArtist, { batchArtist = it })
+                    EditorField("일괄 앨범 (빈칸은 유지)", batchAlbum, { batchAlbum = it })
+                    Button(onClick = {
+                        busy = true
+                        scope.launch {
+                            batchStatus = withContext(Dispatchers.IO) {
+                                var ok = 0
+                                val errors = mutableListOf<String>()
+                                for (uri in folderFiles) {
+                                    val info = AudioMetadata.read(context, uri)
+                                    if (!info.supported) { errors.add(info.fileName); continue }
+                                    val edits = AudioEdits(info.fileName, info.title,
+                                        batchArtist.ifBlank { info.artist }, batchAlbum.ifBlank { info.album },
+                                        info.albumArtist, info.genre, info.year, info.track)
+                                    if (AudioMetadata.save(context, uri, edits).isSuccess) ok++ else errors.add(info.fileName)
+                                }
+                                "$" + "{ok}/" + folderFiles.size + "곡 저장 성공" + if (errors.isNotEmpty()) " · 실패: " + errors.take(5).joinToString() else ""
+                            }
+                            busy = false
+                        }
+                    }, enabled = !busy && folderFiles.isNotEmpty() && (batchArtist.isNotBlank() || batchAlbum.isNotBlank())) { Text("선택 폴더 일괄 저장") }
+                    Button(onClick = {
+                        busy = true
+                        scope.launch {
+                            batchStatus = withContext(Dispatchers.IO) {
+                                val seen = mutableMapOf<String, String>()
+                                val duplicates = mutableListOf<String>()
+                                for (uri in folderFiles) {
+                                    val name = DocumentFile.fromSingleUri(context, uri)?.name ?: uri.toString()
+                                    val md = MessageDigest.getInstance("SHA-256")
+                                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                                        val buf = ByteArray(65536)
+                                        while (true) { val n = stream.read(buf); if (n < 0) break; md.update(buf, 0, n) }
+                                    }
+                                    val key = md.digest().joinToString("") { "%02x".format(it) }
+                                    val first = seen.putIfAbsent(key, name)
+                                    if (first != null) duplicates.add("$" + "{first} / " + name)
+                                }
+                                if (duplicates.isEmpty()) "바이트 단위 중복 파일이 없습니다." else "중복: " + duplicates.take(8).joinToString("; ")
+                            }
+                            busy = false
+                        }
+                    }, enabled = !busy && folderFiles.isNotEmpty()) { Text("중복 음악 검사 (SHA-256)") }
+                    if (batchStatus.isNotBlank()) Text(batchStatus)
+                }
 
                 FilePickerCard(
                     info = info,
