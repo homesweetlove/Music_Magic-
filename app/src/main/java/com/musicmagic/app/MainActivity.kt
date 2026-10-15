@@ -251,6 +251,18 @@ private fun MusicMagicApp() {
                     if (batchStatus.isNotBlank()) Text(batchStatus)
                 }
 
+                Button(onClick = {
+                    busy = true
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) { AudioMetadata.undoLast(context) }
+                        result.fold(
+                            onSuccess = { info -> status = "마지막 수정 이전 상태로 복원했습니다: " + info.fileName; success = true },
+                            onFailure = { status = it.message ?: "복원에 실패했습니다."; success = false }
+                        )
+                        busy = false
+                    }
+                }, enabled = !busy) { Text("↶ 마지막 저장 실행 취소") }
+
                 FilePickerCard(
                     info = info,
                     busy = busy,
