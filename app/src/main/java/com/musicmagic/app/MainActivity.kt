@@ -92,6 +92,7 @@ private fun MusicMagicApp() {
     var genre by remember { mutableStateOf("") }
     var year by remember { mutableStateOf("") }
     var track by remember { mutableStateOf("") }
+    var lyrics by remember { mutableStateOf("") }
     var folderFiles by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var batchStatus by remember { mutableStateOf("") }
     var batchArtist by remember { mutableStateOf("") }
@@ -113,6 +114,7 @@ private fun MusicMagicApp() {
         genre = info.genre
         year = info.year
         track = info.track
+        lyrics = info.lyrics
         artworkBytes = null
     }
 
@@ -216,7 +218,7 @@ private fun MusicMagicApp() {
                                     if (!info.supported) { errors.add(info.fileName); continue }
                                     val edits = AudioEdits(info.fileName, info.title,
                                         batchArtist.ifBlank { info.artist }, batchAlbum.ifBlank { info.album },
-                                        info.albumArtist, info.genre, info.year, info.track)
+                                        info.albumArtist, info.genre, info.year, info.track, info.lyrics)
                                     if (AudioMetadata.save(context, uri, edits).isSuccess) ok++ else errors.add(info.fileName)
                                 }
                                 "$" + "{ok}/" + folderFiles.size + "곡 저장 성공" + if (errors.isNotEmpty()) " · 실패: " + errors.take(5).joinToString() else ""
@@ -345,6 +347,7 @@ private fun MusicMagicApp() {
                                             genre = genre,
                                             year = year,
                                             track = track,
+                                            lyrics = lyrics,
                                             artwork = artworkBytes,
                                         ),
                                     )
