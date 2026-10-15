@@ -298,6 +298,10 @@ private fun MusicMagicApp() {
                         EditorField("트랙 번호", track, { track = it })
                     }
 
+                    SectionCard(title = "가사", icon = Icons.Rounded.Edit) {
+                        androidx.compose.material3.OutlinedTextField(value = lyrics, onValueChange = { lyrics = it }, label = { Text("가사") }, modifier = Modifier.fillMaxWidth(), minLines = 4)
+                    }
+
                     SectionCard(title = "앨범아트", icon = Icons.Rounded.MusicNote) {
                         Button(onClick = { artPicker.launch("image/*") }, enabled = !busy) {
                             Text(if (artworkBytes == null) "표지 이미지 선택" else "새 표지 선택됨 · 변경하기")
