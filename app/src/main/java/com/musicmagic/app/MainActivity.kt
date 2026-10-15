@@ -314,6 +314,11 @@ private fun MusicMagicApp() {
 
                     SectionCard(title = "파일", icon = Icons.Rounded.AudioFile) {
                         EditorField("파일명 · 확장자", fileName, { fileName = it })
+                        Button(onClick = {
+                            val ext = info.fileName.substringAfterLast('.', "")
+                            val base = listOf(artist, title).map { it.trim().replace("/", "_").replace(":", "_") }.filter { it.isNotBlank() }.joinToString(" - ")
+                            if (base.isNotBlank()) fileName = base + if (ext.isBlank()) "" else "." + ext
+                        }) { Text("아티스트 - 제목으로 파일명 정리") }
                         if (extensionChanged) {
                             Spacer(Modifier.height(10.dp))
                             Notice(
