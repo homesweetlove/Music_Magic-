@@ -185,6 +185,14 @@ class LiquidCarouselTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val directory = File(context.getExternalFilesDir(null), "ui-evidence").apply { mkdirs() }
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-        File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val file = File(directory, "$name.png")
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // UTP uninstalls the app after testing and removes its scoped external storage.
+        // Copy through the shell while the debug package is still installed, then collect
+        // from shell-owned storage after the suite. Names above are fixed test constants.
+        val command = "mkdir -p /data/local/tmp/music-magic-ui && run-as ${context.packageName} cat '${file.absolutePath}' > /data/local/tmp/music-magic-ui/$name.png && echo captured"
+        val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+        val result = android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
+        assertTrue("Screenshot must survive test package cleanup", result.contains("captured"))
     }
 }

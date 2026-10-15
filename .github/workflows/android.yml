@@ -67,7 +67,7 @@ jobs:
           arch: x86_64
           disable-animations: false
           script: |
-            gradle :app:connectedDebugAndroidTest --stacktrace --no-daemon; test_result=$?; adb pull /sdcard/Android/data/com.musicmagic.app/files/ui-evidence ui-evidence; exit $test_result
+            gradle :app:connectedDebugAndroidTest --stacktrace --no-daemon; test_result=$?; adb pull /data/local/tmp/music-magic-ui ui-evidence; capture_result=$?; if [ "$test_result" -ne 0 ]; then exit "$test_result"; else exit "$capture_result"; fi
       - name: Upload UI evidence and test reports
         if: always()
         uses: actions/upload-artifact@v4
