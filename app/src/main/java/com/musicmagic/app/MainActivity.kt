@@ -245,6 +245,26 @@ private fun MusicMagicApp() {
 
                 SectionCard(title = "폴더 · 일괄 편집", icon = Icons.Rounded.FolderOpen) {
                     Button(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
+                    if (folderFiles.isNotEmpty()) {
+                        Text("음악 라이브러리 · ${folderFiles.size}곡")
+                        val groups = folderFiles.groupBy { uri ->
+                            DocumentFile.fromSingleUri(context, uri)?.name?.substringBefore(" - ") ?: "기타"
+                        }
+                        groups.toSortedMap().forEach { (group, items) ->
+                            Text(group + " · " + items.size + "곡", fontWeight = FontWeight.SemiBold)
+                            items.take(12).forEach { uri ->
+                                Button(onClick = {
+                                    selectedUri = uri
+                                    busy = true
+                                    scope.launch {
+                                        val loaded = withContext(Dispatchers.IO) { AudioMetadata.read(context, uri) }
+                                        applyInfo(loaded)
+                                        busy = false
+                                    }
+                                }) { Text(DocumentFile.fromSingleUri(context, uri)?.name ?: "음악 파일") }
+                            }
+                        }
+                    }
                     Text("${folderFiles.size}곡 선택됨")
                     EditorField("일괄 아티스트 (빈칸은 유지)", batchArtist, { batchArtist = it })
                     EditorField("일괄 앨범 (빈칸은 유지)", batchAlbum, { batchAlbum = it })
@@ -369,7 +389,29 @@ private fun MusicMagicApp() {
                         EditorField("트랙 번호", track, { track = it })
                     }
 
+                    SectionCard(title = "빠른 태그 정리", icon = Icons.Rounded.Edit) {
+                        Button(onClick = {
+                            val base = fileName.substringBeforeLast('.', fileName)
+                            val parts = base.split(" - ", limit = 2)
+                            if (parts.size == 2) {
+                                artist = parts[0].trim()
+                                title = parts[1].trim()
+                                status = "파일명에서 아티스트·제목을 추출했어요. 확인 후 저장하세요."
+                            } else status = "파일명이 '아티스트 - 제목' 형식이어야 합니다."
+                        }) { Text("파일명에서 제목·아티스트 추출") }
+                        Button(onClick = {
+                            fun clean(value: String) = value.trim().replace(Regex("\\s+"), " ")
+                            title = clean(title); artist = clean(artist); album = clean(album)
+                            albumArtist = clean(albumArtist); genre = clean(genre)
+                            year = clean(year); track = clean(track)
+                            status = "태그의 불필요한 공백을 정리했습니다."
+                        }) { Text("태그 공백 일괄 정규화") }
+                        Text("오디오 품질: " + info.format + " · " + info.bitRate + " kbps · " + info.sampleRate + " Hz · " + info.durationSeconds + "초")
+                        Text(if (info.format in setOf("FLAC", "WAV", "AIFF", "AIF")) "무손실 저장 형식 (원본 품질은 별도 검증 필요)" else "손실 또는 형식별 확인 필요")
+                    }
+
                     SectionCard(title = "가사", icon = Icons.Rounded.Edit) {
+                        Text("LRC 타임스탬프([mm:ss.xx])를 포함한 가사도 텍스트로 편집할 수 있어요. 단, 별도 동기화 태그로 저장하지는 않습니다.")
                         androidx.compose.material3.OutlinedTextField(value = lyrics, onValueChange = { lyrics = it }, label = { Text("가사") }, modifier = Modifier.fillMaxWidth(), minLines = 4)
                     }
 
