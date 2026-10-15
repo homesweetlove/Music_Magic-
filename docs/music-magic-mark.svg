@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108" role="img" aria-labelledby="title">
+  <title id="title">Music Magic</title>
+  <rect width="108" height="108" rx="26" fill="#0A84FF"/>
+  <path fill="#fff" d="M45 26 75 20V67C75 75 69 81 61 81S47 75 47 67 53 53 61 53C64 53 67 54 69 56V32L51 36V72C51 80 45 86 37 86S23 80 23 72 29 58 37 58C40 58 43 59 45 61Z"/>
+  <path fill="#BFE0FF" d="m84 24 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z"/>
+</svg>

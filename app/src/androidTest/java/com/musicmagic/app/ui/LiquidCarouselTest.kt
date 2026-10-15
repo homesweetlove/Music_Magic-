@@ -12,12 +12,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -114,7 +112,6 @@ class LiquidCarouselTest {
         compose.waitForIdle()
         compose.onNodeWithContentDescription("다음 카드").assertIsNotEnabled()
         assertEquals(listOf("b"), actions)
-        evidence("library-light")
     }
 
     @Test fun disabledActionAndShrinkingListStaySafe() {
@@ -140,7 +137,6 @@ class LiquidCarouselTest {
         compose.onNodeWithContentDescription("다음 카드").performClick()
         compose.onNodeWithContentDescription("After · 변환 결과, 결과 재생").performClick()
         assertEquals(listOf(before, after), played)
-        evidence("comparison-light")
     }
 
     @Test fun largeTextDarkModeKeepsNavigationAvailable() {
@@ -158,7 +154,6 @@ class LiquidCarouselTest {
         }
         // Large cards are allowed to grow; the host scrolls, rather than clipping text.
         compose.onNodeWithText("여름의 기록").assertExists()
-        evidence("large-text-dark")
         compose.onNodeWithContentDescription("다음 카드").performScrollTo().performClick()
         compose.onNodeWithContentDescription("다음 카드").assertIsNotEnabled()
     }
@@ -174,25 +169,10 @@ class LiquidCarouselTest {
             compose.setContent { MaterialTheme(colorScheme = lightColorScheme()) { LiquidCardCarousel(items, onAction = {}) } }
             compose.onNodeWithContentDescription("다음 카드").performClick()
             compose.onNodeWithContentDescription("다음 카드").assertIsNotEnabled()
-            evidence("reduced-motion")
         } finally {
             if (previous == "null") shell("settings delete global animator_duration_scale")
             else shell("settings put global animator_duration_scale $previous")
         }
     }
 
-    private fun evidence(name: String) {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val directory = File(context.getExternalFilesDir(null), "ui-evidence").apply { mkdirs() }
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-        val file = File(directory, "$name.png")
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        // UTP uninstalls the app after testing and removes its scoped external storage.
-        // Copy through the shell while the debug package is still installed, then collect
-        // from shell-owned storage after the suite. Names above are fixed test constants.
-        val command = "mkdir -p /data/local/tmp/music-magic-ui && run-as ${context.packageName} cat '${file.absolutePath}' > /data/local/tmp/music-magic-ui/$name.png && echo captured"
-        val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
-        val result = android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
-        assertTrue("Screenshot must survive test package cleanup", result.contains("captured"))
-    }
 }

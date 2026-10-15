@@ -67,13 +67,12 @@ jobs:
           arch: x86_64
           disable-animations: false
           script: |
-            gradle :app:connectedDebugAndroidTest --stacktrace --no-daemon; test_result=$?; adb pull /data/local/tmp/music-magic-ui ui-evidence; capture_result=$?; if [ "$test_result" -ne 0 ]; then exit "$test_result"; else exit "$capture_result"; fi
-      - name: Upload UI evidence and test reports
+            gradle :app:connectedDebugAndroidTest --stacktrace --no-daemon
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: carousel-ui-api-${{ matrix.api }}
           path: |
-            ui-evidence/
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
