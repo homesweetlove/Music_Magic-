@@ -412,8 +412,9 @@ private fun MusicMagicApp() {
                 Button(onClick = {
                     busy = true
                     scope.launch {
-                        val oldUri = context.getSharedPreferences("musicmagic", android.content.Context.MODE_PRIVATE)
-                            .getString("undo_uri", null)?.let(Uri::parse)
+                        val undoPrefs = context.getSharedPreferences("musicmagic", android.content.Context.MODE_PRIVATE)
+                        val oldUri = (undoPrefs.getString("undo_original_uri", null)
+                            ?: undoPrefs.getString("undo_uri", null))?.let(Uri::parse)
                         val result = withContext(Dispatchers.IO) { AudioMetadata.undoLastWithUri(context) }
                         result.fold(
                             onSuccess = { saved ->

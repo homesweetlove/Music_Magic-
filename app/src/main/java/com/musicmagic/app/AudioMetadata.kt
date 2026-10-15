@@ -204,6 +204,7 @@ object AudioMetadata {
             backup.copyTo(undoFile, overwrite = true)
             context.getSharedPreferences("musicmagic", Context.MODE_PRIVATE).edit()
                 .putString("undo_uri", outputUri.toString())
+                .putString("undo_original_uri", outputUri.toString())
                 .putString("undo_name", originalName)
                 .apply()
             context.contentResolver.notifyChange(outputUri, null)
@@ -237,6 +238,9 @@ object AudioMetadata {
     fun undoLastWithUri(context: Context): Result<SaveResult> = runCatching {
         val prefs = context.getSharedPreferences("musicmagic", Context.MODE_PRIVATE)
         val uri = Uri.parse(prefs.getString("undo_uri", null) ?: error("복원할 이전 버전이 없습니다."))
+        // Keep the pre-restore identity if rename succeeds but a provider read fails.
+        // A retry then returns to the UI's original entry, even after another rename.
+        if (!prefs.contains("undo_original_uri")) prefs.edit().putString("undo_original_uri", uri.toString()).apply()
         val backup = File(context.filesDir, UNDO_FILE)
         require(backup.isFile && backup.length() > 0L) { "복원용 백업 파일이 없습니다." }
         val resolver = context.contentResolver
@@ -256,7 +260,7 @@ object AudioMetadata {
         }
         val restored = read(context, restoredUri)
         check(restored.supported) { "복원 후 파일 검증에 실패했습니다." }
-        prefs.edit().remove("undo_uri").remove("undo_name").apply()
+        prefs.edit().remove("undo_uri").remove("undo_original_uri").remove("undo_name").apply()
         backup.delete()
         SaveResult(restored, restoredUri)
     }
