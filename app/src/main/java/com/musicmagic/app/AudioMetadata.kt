@@ -46,6 +46,7 @@ data class AudioEdits(
 data class SaveResult(val info: AudioInfo, val uri: Uri)
 
 object AudioMetadata {
+    private const val UNDO_FILE = "musicmagic-last-backup"
     private const val MAX_FILE_BYTES = 1_024L * 1_024L * 1_024L // 1 GiB
 
     private val editableExtensions = setOf(
@@ -199,6 +200,12 @@ object AudioMetadata {
                 throw writeError
             }
 
+            val undoFile = File(context.filesDir, UNDO_FILE)
+            backup.copyTo(undoFile, overwrite = true)
+            context.getSharedPreferences("musicmagic", Context.MODE_PRIVATE).edit()
+                .putString("undo_uri", outputUri.toString())
+                .putString("undo_name", originalName)
+                .apply()
             context.contentResolver.notifyChange(outputUri, null)
             SaveResult(
                 info = AudioInfo(
@@ -222,6 +229,27 @@ object AudioMetadata {
             work.delete()
             verify.delete()
         }
+    }
+
+    fun undoLast(context: Context): Result<AudioInfo> = runCatching {
+        val prefs = context.getSharedPreferences("musicmagic", Context.MODE_PRIVATE)
+        val uri = Uri.parse(prefs.getString("undo_uri", null) ?: error("복원할 이전 버전이 없습니다."))
+        val backup = File(context.filesDir, UNDO_FILE)
+        require(backup.isFile && backup.length() > 0L) { "복원용 백업 파일이 없습니다." }
+        val resolver = context.contentResolver
+        resolver.openOutputStream(uri, "wt")?.use { out ->
+            backup.inputStream().use { it.copyTo(out) }
+        } ?: error("이 파일에 복원 내용을 쓸 수 없습니다.")
+        val oldName = prefs.getString("undo_name", null)
+        if (!oldName.isNullOrBlank()) {
+            val currentName = DocumentFile.fromSingleUri(context, uri)?.name
+            if (currentName != oldName) runCatching { DocumentsContract.renameDocument(resolver, uri, oldName) }
+        }
+        val restored = read(context, uri)
+        check(restored.supported) { "복원 후 파일 검증에 실패했습니다." }
+        prefs.edit().remove("undo_uri").remove("undo_name").apply()
+        backup.delete()
+        restored
     }
 
     private fun writeArtworkTemp(context: Context, bytes: ByteArray): File {
