@@ -378,6 +378,25 @@ private fun MusicMagicApp() {
                         }
                     }
 
+                    SectionCard(title = "저장 전 변경 사항", icon = Icons.Rounded.Info) {
+                        val changes = listOf(
+                            "제목" to (info.title to title),
+                            "아티스트" to (info.artist to artist),
+                            "앨범" to (info.album to album),
+                            "앨범 아티스트" to (info.albumArtist to albumArtist),
+                            "장르" to (info.genre to genre),
+                            "연도" to (info.year to year),
+                            "트랙" to (info.track to track),
+                            "가사" to (info.lyrics to lyrics),
+                            "파일명" to (info.fileName to fileName)
+                        ).filter { it.second.first != it.second.second }
+                        if (changes.isEmpty() && artworkBytes == null) Text("변경된 내용이 없습니다.")
+                        changes.forEach { (label, pair) ->
+                            Text(label + ": " + pair.first.take(48) + " → " + pair.second.take(48))
+                        }
+                        if (artworkBytes != null) Text("앨범아트: 새 이미지로 변경")
+                    }
+
                     if (status.isNotBlank()) {
                         Notice(
                             text = status,
