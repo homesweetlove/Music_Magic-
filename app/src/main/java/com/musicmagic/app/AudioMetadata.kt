@@ -149,7 +149,7 @@ object AudioMetadata {
             tag.setField(FieldKey.TRACK, edits.track)
             if (edits.artwork != null) {
                 require(edits.artwork.size <= 12 * 1024 * 1024) { "앨범아트는 12MB 이하만 가능합니다." }
-                val artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromBinaryData(edits.artwork)
+                val artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(writeArtworkTemp(context, edits.artwork))
                 tag.deleteArtworkField()
                 tag.setField(artwork)
             }
@@ -217,6 +217,13 @@ object AudioMetadata {
             work.delete()
             verify.delete()
         }
+    }
+
+    private fun writeArtworkTemp(context: Context, bytes: ByteArray): File {
+        val file = File.createTempFile("musicmagic-cover-", ".jpg", context.cacheDir)
+        file.writeBytes(bytes)
+        file.deleteOnExit()
+        return file
     }
 
     private fun verifyFields(tag: org.jaudiotagger.tag.Tag, edits: AudioEdits) {
