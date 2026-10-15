@@ -118,6 +118,21 @@ private fun MusicMagicApp() {
         artworkBytes = null
     }
 
+    val m4aPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mp4")) { target ->
+        val source = selectedUri
+        if (target != null && source != null) {
+            busy = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) { M4aConverter.convert(context, source, target) }
+                result.fold(
+                    onSuccess = { status = "AAC M4A 변환 완료: " + it + " bytes"; success = true },
+                    onFailure = { status = "M4A 변환 실패: " + (it.message ?: "알 수 없는 오류"); success = false }
+                )
+                busy = false
+            }
+        }
+    }
+
     val wavPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { target ->
         val source = selectedUri
         if (target != null && source != null) {
@@ -361,6 +376,10 @@ private fun MusicMagicApp() {
                         val base = info.fileName.substringBeforeLast('.', info.fileName)
                         wavPicker.launch(base + ".wav")
                     }, enabled = !busy) { Text("실제 PCM WAV로 변환하여 새 파일 저장") }
+
+                    Button(onClick = {
+                        m4aPicker.launch(info.fileName.substringBeforeLast('.', info.fileName) + ".m4a")
+                    }, enabled = !busy) { Text("AAC M4A로 실제 인코딩하여 새 파일 저장") }
 
                     SectionCard(title = "파일", icon = Icons.Rounded.AudioFile) {
                         EditorField("파일명 · 확장자", fileName, { fileName = it })
