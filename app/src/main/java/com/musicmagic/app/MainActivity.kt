@@ -5,7 +5,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.media.MediaPlayer
 import androidx.compose.runtime.DisposableEffect
-import android.media.MediaPlayer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
