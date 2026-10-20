@@ -415,7 +415,7 @@ fun MusicPlayerScreen(
             )
             CollectionsPanel(
                 tracks = tracks,
-                selected = displayTrack,
+                selected = focus,
                 revision = revision,
                 onPlayQueue = ::playCollection,
             )
