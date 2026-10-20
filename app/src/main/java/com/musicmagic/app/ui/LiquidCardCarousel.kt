@@ -32,6 +32,7 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -248,6 +249,7 @@ fun LiquidCardCarousel(
                 onClick = { move(-1) },
                 enabled = settledPage > 0 && !navigating && !pager.isScrollInProgress,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), CircleShape)
                     .semantics { contentDescription = "이전 카드" },
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -267,6 +269,7 @@ fun LiquidCardCarousel(
                 onClick = { move(1) },
                 enabled = settledPage < items.lastIndex && !navigating && !pager.isScrollInProgress,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), CircleShape)
                     .semantics { contentDescription = "다음 카드" },
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
@@ -306,9 +309,9 @@ private fun LiquidCarouselCard(
             }
         } else emptyList()
     }
-    val shell = if (dark) Color(0xFF171B27) else Color(0xFFF4F6FC)
-    val ink = if (dark) Color(0xFFF4F6FF) else Color(0xFF161B2C)
-    val secondaryInk = if (dark) Color(0xFFCED3E1) else Color(0xFF48516A)
+    val shell = if (dark) Color(0xFF191B25) else Color(0xFFFFFFFF)
+    val ink = if (dark) Color(0xFFF5F5F7) else Color(0xFF1C1C1E)
+    val secondaryInk = if (dark) Color(0xFFC7C7CC) else Color(0xFF636366)
     val cardShape = RoundedCornerShape(32.dp)
 
     Column(
@@ -409,9 +412,13 @@ private fun LiquidCarouselCard(
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
                     .semantics { contentDescription = "${item.title}, ${item.actionLabel}" },
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(50.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = if (dark) Color.White else Color(0xFF1C1C1E),
+                    contentColor = if (dark) Color(0xFF191B25) else Color.White,
+                ),
             ) {
-                Text(item.actionLabel, textAlign = TextAlign.Center)
+                Text(item.actionLabel, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
             }
         }
     }
