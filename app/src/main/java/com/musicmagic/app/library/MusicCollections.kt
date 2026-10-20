@@ -15,6 +15,18 @@ object MusicCollections {
     private const val FAVORITES = "favorite_uris"
     private const val PLAYLISTS = "playlists"
 
+    private const val ORDER = "collection_sort_order"
+
+    fun sortOrder(context: Context): MusicSort = runCatching {
+        MusicSort.valueOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(ORDER, MusicSort.MANUAL.name).orEmpty())
+    }.getOrDefault(MusicSort.MANUAL)
+
+    fun setSortOrder(context: Context, order: MusicSort) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(ORDER, order.name).apply()
+    }
+
     fun lastTree(context: Context): Uri? =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(TREE, null)?.let(Uri::parse)
