@@ -2,7 +2,10 @@ package com.musicmagic.app.player
 
 import android.content.ComponentName
 import android.net.Uri
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -33,12 +37,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.min
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -56,6 +63,8 @@ fun MiniPlayerBar(onExpand: () -> Unit, modifier: Modifier = Modifier) {
     var title by remember { mutableStateOf("") }
     var artist by remember { mutableStateOf("") }
     var playing by remember { mutableStateOf(false) }
+    var pulledUp by remember { mutableFloatStateOf(0f) }
+    val animatedPull by animateFloatAsState(pulledUp, spring(), label = "mini-player expansion")
 
     DisposableEffect(context) {
         val pending = MediaController.Builder(
@@ -102,7 +111,30 @@ fun MiniPlayerBar(onExpand: () -> Unit, modifier: Modifier = Modifier) {
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 2.dp,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth()
+            .graphicsLayer {
+                translationY = animatedPull
+                val lift = (-animatedPull / (100f * density)).coerceIn(0f, 1f)
+                scaleX = 1f + lift * .035f
+                scaleY = 1f + lift * .04f
+            }
+            .pointerInput(onExpand) {
+                var distance = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { distance = 0f },
+                    onVerticalDrag = { change, drag ->
+                        change.consume()
+                        distance += drag
+                        pulledUp = min(0f, distance).coerceAtLeast(-120.dp.toPx())
+                    },
+                    onDragEnd = {
+                        val expand = distance < -45.dp.toPx()
+                        pulledUp = 0f
+                        if (expand) onExpand()
+                    },
+                    onDragCancel = { pulledUp = 0f },
+                )
+            },
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
