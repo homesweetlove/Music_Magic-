@@ -494,7 +494,7 @@ private fun MusicMagicApp() {
                             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
                         )
                     }
-                )
+                }
 
                 if (libraryTracks.isNotEmpty()) {
                     MusicLibraryCarousel(libraryTracks, busy, libraryRevision, onSelect = ::openEditor)
