@@ -31,6 +31,29 @@ Avoid using translucent material for every content row; functional navigation an
 transport controls get the glass treatment, while text editing remains simple.
 This matches the separation of controls and content in Apple's design guidance.
 
+### Immersive liquid portal (player-only)
+
+The carousel is now deliberately more dramatic than the calm editor:
+- **Continuous vortex:** five rotating spiral ribbons (soft wide-body glow and a
+  thin luminous edge) and a breathing center are drawn with a Compose Canvas.
+  This is live rendering, not a GIF, video, stock image or looping screenshot.
+- **Gesture-driven card depth:** during horizontal drags and spring settling,
+  album cards shrink toward a vanishing point, tilt in two axes, move vertically
+  and grow back to full size. Artwork parallax and motion blur get stronger
+  during the transition. The ordinary editor carousel keeps gentler motion.
+- **Real lens deformation:** Android 13+ uses a tiny AGSL RuntimeShader to
+  twist the album-cover sampling coordinates as cards cross the screen. Android
+  10–12 falls back to spring transforms, parallax, and its normal artwork.
+- **Cover palette:** the existing bounded art extractor drives the vortex's
+  color with an animated crossfade when the currently playing song changes.
+- **Playback behavior:** playing makes the vortex brighter and stronger; pausing
+  eases it down. This is a time-based ambient effect, not microphone capture,
+  DSP analysis, or frequency/beat synchronization.
+
+No new permissions or networking are required. The system's reduced-motion
+setting and Android's low-RAM flag disable the animated vortex; the cards keep
+their navigation functions. Shader distortion is only used on Android 13+.
+
 ### Accessibility & performance
 
 - Icons for navigation/playback have Korean content descriptions.
