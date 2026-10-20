@@ -118,6 +118,7 @@ fun LiquidCardCarousel(
     modifier: Modifier = Modifier,
     onAction: (LiquidCardItem) -> Unit,
     onSettled: ((LiquidCardItem) -> Unit)? = null,
+    immersive: Boolean = false,
 ) {
     val ids = remember(items) {
         items.map { it.id }.also { keys ->
@@ -228,6 +229,7 @@ fun LiquidCardCarousel(
             LiquidCarouselCard(
                 item = item,
                 dark = dark,
+                immersive = immersive,
                 motionEnabled = motionEnabled,
                 allowBlur = motionEnabled && !lowRam && Build.VERSION.SDK_INT >= 31,
                 offset = { (pager.currentPage - page + pager.currentPageOffsetFraction).coerceIn(-1f, 1f) },
@@ -282,6 +284,7 @@ fun LiquidCardCarousel(
 private fun LiquidCarouselCard(
     item: LiquidCardItem,
     dark: Boolean,
+    immersive: Boolean,
     motionEnabled: Boolean,
     allowBlur: Boolean,
     offset: () -> Float,
@@ -298,12 +301,12 @@ private fun LiquidCarouselCard(
         item.artwork?.takeUnless { it.isRecycled }?.asImageBitmap()
     }
     val density = LocalDensity.current
-    val blurEffects = remember(allowBlur, density.density) {
+    val blurEffects = remember(allowBlur, immersive, density.density) {
         if (allowBlur) {
             List(5) { level ->
                 if (level == 0) null else BlurEffect(
-                    radiusX = with(density) { (level * 0.8f).dp.toPx() },
-                    radiusY = with(density) { 0.4.dp.toPx() },
+                    radiusX = with(density) { (level * if (immersive) 2.8f else 0.8f).dp.toPx() },
+                    radiusY = with(density) { (level * if (immersive) 1.3f else 0.4f).dp.toPx() },
                     edgeTreatment = TileMode.Clamp,
                 )
             }
@@ -319,8 +322,20 @@ private fun LiquidCarouselCard(
             .graphicsLayer {
                 val distance = if (motionEnabled) abs(offset()) else 0f
                 val stretch = sin(distance * Math.PI).toFloat()
-                scaleX = 1f - distance * 0.035f + stretch * 0.012f
-                scaleY = 1f - distance * 0.025f - stretch * 0.008f
+                if (immersive && motionEnabled) {
+                    // Spring-powered pull-in: the departing card tilts into a
+                    // vanishing point and expands back out as it snaps home.
+                    scaleX = 1f - distance * .18f + stretch * .055f
+                    scaleY = 1f - distance * .16f - stretch * .032f
+                    rotationZ = -offset() * 6f
+                    rotationY = offset() * 11f
+                    translationY = distance * 22.dp.toPx()
+                    cameraDistance = 18.dp.toPx()
+                    alpha = 1f - distance * .23f
+                } else {
+                    scaleX = 1f - distance * .035f + stretch * .012f
+                    scaleY = 1f - distance * .025f - stretch * .008f
+                }
             }
             .clip(cardShape)
             .background(shell)
@@ -372,7 +387,10 @@ private fun LiquidCarouselCard(
                         renderEffect = if (allowBlur && isMoving()) {
                             blurEffects[(abs(position) * 4f).roundToInt().coerceIn(0, 4)]
                         } else null
-                    },
+                    }.then(
+                        if (immersive && motionEnabled) Modifier.liquidLensWarp(offset, enabled = true)
+                        else Modifier,
+                    ),
                 )
             } else {
                 Icon(
