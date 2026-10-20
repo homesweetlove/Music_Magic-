@@ -76,7 +76,10 @@ fun MiniPlayerBar(onExpand: () -> Unit, onEdit: (Uri) -> Unit) {
                 if (alive) {
                     controller = player
                     player.addListener(listener)
-                    listener.onEvents(player, Player.Events.EMPTY)
+                    mediaId = player.currentMediaItem?.mediaId
+                    title = player.currentMediaItem?.mediaMetadata?.title?.toString().orEmpty()
+                    artist = player.currentMediaItem?.mediaMetadata?.artist?.toString().orEmpty()
+                    playing = player.isPlaying
                 }
             }
         }, ContextCompat.getMainExecutor(context))
