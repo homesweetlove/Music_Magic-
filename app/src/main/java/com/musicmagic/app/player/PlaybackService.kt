@@ -2,6 +2,7 @@ package com.musicmagic.app.player
 
 import android.graphics.Bitmap
 import android.net.Uri
+import java.lang.ref.WeakReference
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -24,6 +25,27 @@ import java.io.ByteArrayOutputStream
  * Only the active item is decoded; a 192px JPEG keeps IPC/session payloads small.
  */
 class PlaybackService : MediaSessionService() {
+    companion object {
+        private var livePlayer: WeakReference<ExoPlayer>? = null
+
+        /**
+         * Called on the app's main thread BEFORE writing/renaming files.
+         * Clearing references from the queue prevents stale file descriptors
+         * and accidental playback while tags are being replaced on disk.
+         * An empty collection is used for Undo, where the target may be renamed.
+         */
+        fun stopForEditing(uris: Collection<Uri>) {
+            val player = livePlayer?.get() ?: return
+            val target = uris.mapTo(mutableSetOf()) { it.toString() }
+            if (target.isEmpty() || (0 until player.mediaItemCount).any {
+                    player.getMediaItemAt(it).mediaId in target
+                }) {
+                player.stop()
+                player.clearMediaItems()
+            }
+        }
+    }
+
     private var mediaSession: MediaSession? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var artJob: Job? = null
@@ -44,6 +66,7 @@ class PlaybackService : MediaSessionService() {
                 true,
             )
             .build()
+        livePlayer = WeakReference(player)
         player.addListener(artworkListener)
         mediaSession = MediaSession.Builder(this, player).build()
     }
@@ -93,6 +116,7 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onDestroy() {
+        livePlayer = null
         artJob?.cancel()
         scope.cancel()
         mediaSession?.let {
