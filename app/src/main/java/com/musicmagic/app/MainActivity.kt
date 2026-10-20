@@ -472,12 +472,13 @@ private fun MusicMagicApp() {
                             onEdit = ::openEditor,
                         )
                     } else {
+                        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                         Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .safeDrawingPadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 116.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Spacer(Modifier.height(10.dp))
@@ -533,12 +534,7 @@ private fun MusicMagicApp() {
                     }
                 }
 
-                MiniPlayerBar(
-                    onExpand = { currentScreen = "player" },
-                    onEdit = { uri -> openEditor(uri) },
-                )
-
-                if (libraryTracks.isNotEmpty()) {
+                 if (libraryTracks.isNotEmpty()) {
                     MusicLibraryCarousel(libraryTracks, busy, libraryRevision, onSelect = ::openEditor)
                 }
 
@@ -859,6 +855,12 @@ private fun MusicMagicApp() {
 
                 SupportedFormatsCard()
                 Spacer(Modifier.height(24.dp))
+                        }
+                        MiniPlayerBar(
+                            onExpand = { currentScreen = "player" },
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                                .padding(horizontal = 17.dp, vertical = 12.dp),
+                        )
                         }
                     }
                 }
