@@ -1,7 +1,6 @@
 package com.musicmagic.app.player
 
 import android.content.ComponentName
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,7 +48,7 @@ import kotlinx.coroutines.withContext
 
 /** Compact playback controls remain available while the metadata editor is visible. */
 @Composable
-fun MiniPlayerBar(onExpand: () -> Unit, onEdit: (Uri) -> Unit) {
+fun MiniPlayerBar(onExpand: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var mediaId by remember { mutableStateOf<String?>(null) }
@@ -102,7 +101,7 @@ fun MiniPlayerBar(onExpand: () -> Unit, onEdit: (Uri) -> Unit) {
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 2.dp,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
