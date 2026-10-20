@@ -36,6 +36,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.musicmagic.app.library.LibraryTrack
 import com.musicmagic.app.library.MusicCollections
+import com.musicmagic.app.library.MusicSort
+import com.musicmagic.app.library.LibrarySorting
 
 /** Favorites and named playlists are on-device only. Nothing is uploaded or shared. */
 @Composable
@@ -52,7 +54,10 @@ fun CollectionsPanel(
     var creating by remember { mutableStateOf(false) }
     var removeName by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf("") }
-    val favoriteSongs = tracks.filter { it.uri.toString() in favorites }
+    var ordering by remember(context) { mutableStateOf(MusicCollections.sortOrder(context)) }
+    var showSmart by remember { mutableStateOf(false) }
+    fun sorted(items: List<LibraryTrack>) = LibrarySorting.sort(items, ordering, favorites)
+    val favoriteSongs = sorted(tracks.filter { it.uri.toString() in favorites })
     val selectedId = selected?.uri?.toString()
 
     Column(
@@ -101,10 +106,44 @@ fun CollectionsPanel(
             Text("재생목록", color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             TextButton(onClick = { newName = ""; creating = true }) { Text("+ 새 목록", color = Color.White) }
         }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("자동 정렬", color = Color.White.copy(alpha = .75f), modifier = Modifier.weight(1f))
+            TextButton(onClick = {
+                ordering = MusicSort.entries[(ordering.ordinal + 1) % MusicSort.entries.size]
+                MusicCollections.setSortOrder(context, ordering)
+            }) { Text(ordering.label + " ↻", color = Color.White) }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("스마트 컬렉션", color = Color.White, modifier = Modifier.weight(1f))
+            TextButton(onClick = { showSmart = !showSmart }) {
+                Text(if (showSmart) "접기" else "아티스트·폴더별 보기", color = Color.White)
+            }
+        }
+        if (showSmart) {
+            val smartGroups = listOf(
+                "아티스트" to LibrarySorting.byArtist(tracks),
+                "폴더" to LibrarySorting.byFolder(tracks),
+            )
+            smartGroups.forEach { (kind, groups) ->
+                groups.toSortedMap().entries.take(14).forEach { (name, songs) ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("$kind · $name", color = Color.White, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis)
+                            Text("${songs.size}곡", color = Color.White.copy(alpha = .55f),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(onClick = { onPlayQueue(sorted(songs)) }) {
+                            Text("재생", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
         if (playlists.isEmpty()) Text("직접 만드는 재생목록은 기기에만 저장돼요.",
             color = Color.White.copy(alpha = 0.63f))
         playlists.forEach { (name, ids) ->
-            val songs = ids.mapNotNull { id -> tracks.firstOrNull { it.uri.toString() == id } }
+            val songs = sorted(ids.mapNotNull { id -> tracks.firstOrNull { it.uri.toString() == id } })
             Surface(
                 shape = RoundedCornerShape(19.dp),
                 color = Color.White.copy(alpha = 0.085f),
