@@ -51,6 +51,17 @@ Android 10+ · API 29+ · Debug-signed preview · Google Play 배포 없음 / No
 > **미리보기 빌드 / Preview build** — 개발용 서명(debug) APK이며 Google Play 배포판이 아닙니다. / This APK uses a debug signing key and is distributed as a preview outside Google Play.
 
 <a id="features"></a>
+## Music library and playback additions (development branch)
+
+- **Automatic folder restoration:** after choosing a folder through Android SAF, Music Magic remembers the tree URI and rescans it at launch. If the provider revokes permission, choose the folder again.
+- **Mini player in the editor:** the current track, artwork and pause/next controls appear above the library.
+- **Favorites and named playlists:** on-device preferences only. Add/remove the selected song, create/delete named lists, play a list as a Media3 queue. Deleting a playlist never deletes audio files.
+- **Lyrics:** play the selected/playing track and open **가사 보기** to see embedded plain lyrics or synchronized LRC lines. Tap a timed line to seek.
+- **Cover on the lock screen:** Media3 playback session asynchronously adds compact embedded artwork to the current song's metadata.
+- **Save safety:** saving original files, batch saves and Undo stop the media session queue beforehand if the affected file is referenced, avoiding simultaneous playback while its bytes change.
+
+This functionality is in source and is subject to the latest Android CI and real-device confirmation; **the older Release APK linked above does not contain it.**
+
 ## New: iOS-inspired UI (development branch)
 
 The [Fluid Music Player PR #1](https://github.com/homesweetlove/Music_Magic-/pull/1) now includes an
