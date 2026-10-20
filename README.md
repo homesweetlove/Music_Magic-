@@ -20,6 +20,8 @@ An Android audio metadata editor with an iOS-inspired interface.
 
 [직접 다운로드 / Direct APK download](https://github.com/homesweetlove/Music_Magic-/releases/download/v1.0.0-liquid-ui/Music-Magic-debug.apk) · [릴리스 / Release notes](https://github.com/homesweetlove/Music_Magic-/releases/tag/v1.0.0-liquid-ui)
 
+> **플레이어 개발 버전 안내:** 위 v1.0.0 릴리스 APK는 기존 편집기 버전입니다. 새 플레이어는 [PR #1](https://github.com/homesweetlove/Music_Magic-/pull/1)의 `feat/fluid-music-player` 브랜치에 있으며, 빌드 검증 후 새 APK로 배포해야 합니다.
+
 **비공개 저장소: 접근 권한이 있는 GitHub 계정으로 로그인해야 다운로드할 수 있습니다.**<br />
 **Private repository: sign in to GitHub with an account that has repository access to download.**
 
@@ -66,6 +68,8 @@ Music Magic writes **metadata into the actual audio file**. Saving overwrites th
 | **내보내기 · Export** | PCM WAV / AAC M4A 변환, 성공한 결과와 원본의 Before/After 비교 재생 | Export PCM WAV / AAC M4A; compare the actual source with a successful export |
 | **곡 정보 · Lookup** | 선택적으로 MusicBrainz 검색 실행 — 인터넷 필요 | Optional, explicitly requested MusicBrainz lookup — internet required |
 | **로컬 편집 · Local editing** | 메타데이터 편집은 오프라인으로 사용. 로그인·자체 서버·광고 없음 | Edit metadata offline. No app login, app backend or ads |
+
+**재생 지원:** 편집 가능한 모든 확장자가 모든 Android 기기에서 재생되는 것은 아닙니다. 실제 재생 가능 여부는 기기의 Media3/시스템 코덱에 따라 달라집니다.
 
 **메타데이터 형식 / Metadata formats**<br />
 MP3 · FLAC · M4A/M4B/MP4 · OGG/OGA · Opus · WAV · AIF/AIFF · WMA · DSF
