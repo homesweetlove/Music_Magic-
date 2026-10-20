@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.media.MediaPlayer
 import androidx.documentfile.provider.DocumentFile
 import java.security.MessageDigest
+import java.io.File
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
@@ -169,6 +170,7 @@ private fun MusicMagicApp() {
     var artworkBytes by remember { mutableStateOf<ByteArray?>(null) }
     var artworkRemoved by remember { mutableStateOf(false) }
     var artworkEditingUri by remember { mutableStateOf<Uri?>(null) }
+    var existingArtworkTemp by remember { mutableStateOf<File?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var success by remember { mutableStateOf(false) }
@@ -339,6 +341,8 @@ private fun MusicMagicApp() {
     }
 
     val artPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        existingArtworkTemp?.delete()
+        existingArtworkTemp = null
         artworkEditingUri = uri
     }
     val batchArtPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -398,17 +402,22 @@ private fun MusicMagicApp() {
         artworkEditingUri?.let { imageUri ->
             AlbumArtworkDialog(
                 uri = imageUri,
-                onDismiss = { artworkEditingUri = null },
+                onDismiss = {
+                    artworkEditingUri = null
+                    existingArtworkTemp?.delete(); existingArtworkTemp = null
+                },
                 onSave = { bytes ->
                     artworkBytes = bytes
                     artworkRemoved = false
                     artworkEditingUri = null
+                    existingArtworkTemp?.delete(); existingArtworkTemp = null
                     status = "앨범 표지 편집 완료 · 저장을 누르면 음악 파일에 반영됩니다."
                 },
                 onRemove = {
                     artworkRemoved = true
                     artworkBytes = null
                     artworkEditingUri = null
+                    existingArtworkTemp?.delete(); existingArtworkTemp = null
                     status = "앨범 표지 삭제 선택됨 · 저장을 누르면 반영됩니다."
                 },
             )
@@ -848,6 +857,23 @@ private fun MusicMagicApp() {
                     }
 
                     SectionCard(title = "앨범아트", icon = Icons.Rounded.MusicNote) {
+                        MagicButton(onClick = {
+                            val audio = selectedUri ?: return@MagicButton
+                            busy = true
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching { ArtworkEditing.extractEmbedded(context, audio) }
+                                }
+                                result.fold(onSuccess = { file ->
+                                    existingArtworkTemp?.delete()
+                                    existingArtworkTemp = file
+                                    artworkEditingUri = Uri.fromFile(file)
+                                }, onFailure = {
+                                    status = it.message ?: "기존 표지를 읽을 수 없습니다."
+                                })
+                                busy = false
+                            }
+                        }, enabled = !busy && selectedUri != null) { Text("현재 표지 바로 편집") }
                         MagicButton(onClick = { artPicker.launch("image/*") }, enabled = !busy) {
                             Text(if (artworkBytes == null) "표지 편집 · 자르기 · 회전" else "편집된 표지 다시 변경")
                         }
