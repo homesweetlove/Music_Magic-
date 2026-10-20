@@ -78,6 +78,7 @@ import com.musicmagic.app.library.LibraryTrack
 import com.musicmagic.app.ui.GlassIconButton
 import com.musicmagic.app.ui.LiquidCardCarousel
 import com.musicmagic.app.ui.LiquidCardItem
+import com.musicmagic.app.ui.LiquidVortexBackdrop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -225,18 +226,25 @@ fun MusicPlayerScreen(
         if (source.isNotEmpty()) play(0, source)
     }
 
-    Column(
-        Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(listOf(
-                lerp(accent, Color(0xFF10131C), 0.6f),
-                backdrop, Color(0xFF12121C), Color(0xFF090A10),
-            )))
-            .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.13f), Color.Transparent), radius = 960f))
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 38.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+    Box(
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(
+            lerp(accent, Color(0xFF10131C), 0.58f),
+            backdrop, Color(0xFF12121C), Color(0xFF090A10),
+        ))),
     ) {
+        // Live shader-free vortex behind the artwork, motion tied to playback.
+        LiquidVortexBackdrop(
+            accent = accent,
+            playing = playing,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Column(
+            Modifier.fillMaxSize()
+                .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 38.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
         Row(
             Modifier.fillMaxWidth().padding(top = 14.dp, start = 22.dp, end = 22.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -307,6 +315,7 @@ fun MusicPlayerScreen(
                     focusIndex = tracks.indexOfFirst { it.uri.toString() == card.id }.coerceAtLeast(0)
                 },
                 onAction = { card -> play(tracks.indexOfFirst { it.uri.toString() == card.id }) },
+                immersive = true,
             )
             }
 
@@ -469,6 +478,7 @@ fun MusicPlayerScreen(
                     }
                 }
             }
+        }
         }
     }
 }
