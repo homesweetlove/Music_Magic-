@@ -24,6 +24,8 @@ data class LibraryTrack(
     val album: String,
     val albumArtist: String,
     val quality: String,
+    val modifiedAt: Long = 0L,
+    val folderName: String = "",
 )
 
 data class CoverArt(val bitmap: Bitmap?, val accent: Color)
@@ -99,7 +101,8 @@ object LibraryMedia {
                 if (tracks.size >= 500) break
                 if (file.isDirectory) queue.add(file)
                 else if (file.isFile && file.name?.substringAfterLast('.', "")?.lowercase() in extensions) {
-                    tracks.add(readTrack(context, file.uri, file.name ?: "음악 파일"))
+                    tracks.add(readTrack(context, file.uri, file.name ?: "음악 파일",
+                        file.lastModified(), directory.name.orEmpty()))
                     onProgress(tracks.size)
                 }
             }
@@ -107,8 +110,8 @@ object LibraryMedia {
         return tracks
     }
 
-    fun readTrack(context: Context, uri: Uri, name: String): LibraryTrack {
-        val fallback = LibraryTrack(uri, name, name.substringBeforeLast('.', name), "알 수 없는 아티스트", "앨범 정보 없음", "", name.substringAfterLast('.', "AUDIO").uppercase())
+    fun readTrack(context: Context, uri: Uri, name: String, modifiedAt: Long = 0L, folderName: String = ""): LibraryTrack {
+        val fallback = LibraryTrack(uri, name, name.substringBeforeLast('.', name), "알 수 없는 아티스트", "앨범 정보 없음", "", name.substringAfterLast('.', "AUDIO").uppercase(), modifiedAt, folderName)
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
