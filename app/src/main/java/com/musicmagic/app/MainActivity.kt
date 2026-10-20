@@ -725,6 +725,41 @@ private fun MusicMagicApp() {
                     }
                 }, enabled = !busy) { Text("↶ 마지막 저장 실행 취소") }
 
+                SectionCard(title = "변경 내역 · 원본 복원", icon = Icons.Rounded.Edit) {
+                    val entries = remember(historyRevision) { EditHistory.list(context) }
+                    EditHistoryPanel(
+                        entries = entries,
+                        busy = busy,
+                        onClear = { askClearHistory = true },
+                        onRestore = { entry ->
+                            val previousUri = Uri.parse(entry.uri)
+                            player?.release(); player = null
+                            PlaybackService.stopForEditing(listOf(previousUri))
+                            busy = true
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    EditHistory.restore(context, entry.id)
+                                }
+                                result.fold(onSuccess = { saved ->
+                                    updateLibrary(previousUri, saved)
+                                    if (selectedUri?.let { LibraryMedia.sameDocument(it, previousUri) } == true) {
+                                        selectedUri = saved.uri
+                                        applyInfo(saved.info)
+                                    }
+                                    historyRevision++
+                                    libraryRevision++
+                                    status = "변경 기록으로 파일을 복원했습니다: " + saved.info.fileName
+                                    success = true
+                                }, onFailure = {
+                                    status = "기록 복원 실패: " + it.message
+                                    success = false
+                                })
+                                busy = false
+                            }
+                        },
+                    )
+                }
+
                 FilePickerCard(
                     info = info,
                     busy = busy,
