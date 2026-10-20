@@ -20,6 +20,8 @@ An Android audio metadata editor with an iOS-inspired interface.
 
 [직접 다운로드 / Direct APK download](https://github.com/homesweetlove/Music_Magic-/releases/download/v1.0.0-liquid-ui/Music-Magic-debug.apk) · [릴리스 / Release notes](https://github.com/homesweetlove/Music_Magic-/releases/tag/v1.0.0-liquid-ui)
 
+> **플레이어 개발 버전 안내:** 위 v1.0.0 릴리스 APK는 기존 편집기 버전입니다. 새 플레이어는 [PR #1](https://github.com/homesweetlove/Music_Magic-/pull/1)의 `feat/fluid-music-player` 브랜치에 있으며, 빌드 검증 후 새 APK로 배포해야 합니다.
+
 **비공개 저장소: 접근 권한이 있는 GitHub 계정으로 로그인해야 다운로드할 수 있습니다.**<br />
 **Private repository: sign in to GitHub with an account that has repository access to download.**
 
@@ -49,6 +51,112 @@ Android 10+ · API 29+ · Debug-signed preview · Google Play 배포 없음 / No
 > **미리보기 빌드 / Preview build** — 개발용 서명(debug) APK이며 Google Play 배포판이 아닙니다. / This APK uses a debug signing key and is distributed as a preview outside Google Play.
 
 <a id="features"></a>
+## Music Magic 1.2.0 — Liquid Morph and Editor Feature Pack
+
+**New features**
+
+- **True gesture-dependent liquid connection:** a transparent metaball-style
+  Bézier neck grows between leaving and arriving album covers as you drag; the
+  fluid bridge mixes their cover accents, glows, and breaks into droplets. The
+  player keeps the earlier AGSL lens, suction perspective and ambient vortex.
+- **Expandable mini-player:** tap the artwork/title or swipe up on the docked
+  mini-player; the full-screen player expands from the bottom with a spring.
+- **Album-cover editor:** center crop, 1–3× zoom, 90° rotation, PNG/JPEG output
+  or remove embedded artwork. The actual encoded MIME is stored in the tag.
+- **Higher-resolution WAV/FLAC path:** directly tag standard RIFF PCM
+  16/24/32-bit audio without re-encoding samples. On fallback, the Android
+  encoder may accept 16/24/32-bit *integer* PCM; its FLAC STREAMINFO bit depth
+  is checked before publishing the new file. If the device cannot preserve
+  the original depth, the operation fails safely. No automatic conversion of
+  float PCM or multichannel sources.
+- **Multi-track batch editor:** select individual scanned tracks, select
+  all/none, and apply common artwork, artist or album metadata. Per-file
+  results are reported; files are processed serially to avoid concurrent
+  writes to original audio.
+- **Local edit journal:** last 8 successful edit summaries with before/after
+  values, plus actual private byte-for-byte backups for files <=40 MiB,
+  capped at 120 MiB total. Restore only when a backup exists and the document
+  remains accessible. Large files still retain their basic edit summary.
+- **Automatic playlist ordering:** insertion order, title, artist, album,
+  newest modification and favorites-first, with dynamic artist and folder
+  collections; the chosen sorting mode persists between launches.
+
+The APK is a development build. Audio formats and third-party WAV art display
+remain device/player-dependent; please test on the actual device before
+replacing irreplaceable originals. Source and integration test progress are
+tracked in PR #1.
+
+## New: WAV covers, cover-only save, and liquid poster playback
+
+### Editing
+- **Independent changes:** a song can be saved when only the album cover, title,
+  artist, album, lyrics, or any other editable tag changes. Blank title or artist
+  is valid; a new cover does not require filling either field.
+- **RIFF WAV artwork:** for ordinary RIFF WAV files, Music Magic writes a
+  standard ID3v2.3/APIC front-cover chunk. Audio samples are never decoded or
+  re-encoded during this operation, and the written metadata is re-read before
+  the app overwrites the original. The WAV library artwork reader recognizes
+  these cover chunks even if Android's built-in metadata retriever does not.
+- **Automatic FLAC fallback:** if a WAV artwork update cannot be verified or
+  the WAV document cannot be modified, the app attempts a NEW FLAC file using
+  the device's native lossless FLAC encoder. Only 16-bit mono/stereo PCM WAV is
+  eligible for this fallback; any other depth or unsupported container yields
+  a clear error rather than silent downsampling. The original WAV is retained.
+  The new file is written into the selected writable music tree when available,
+  or into the device's `Music/Music Magic` collection.
+- **Rollback:** direct in-place saves retain the existing backup and revert
+  the original if verification fails. In fallback mode, a partial destination
+  file is deleted on failure.
+
+Third-party WAV player artwork support varies, even for standards-compliant
+RIFF/ID3 chunks. Converting to FLAC is only attempted when WAV embedding or
+write/readback verification actually fails; direct WAV saves preserve PCM.
+
+### Player
+The Now Playing carousel now uses dedicated large, saturated, cover-reactive
+**liquid poster cards** rather than the editor's plain cards. It has a floating
+cover, drag-bound Bézier liquid membrane, AGSL lens distortion where supported,
+parallax, motion blur and a moving vortex backdrop. These are interactive
+Android Compose graphics inspired by the reference animation, not copied
+HTML/CSS or the original artist's video.
+
+See `docs/DESIGN.md` for effects, reduced motion and performance limits.
+
+## Immersive liquid motion — development branch
+
+**Now Playing includes a real animated portal**, beyond a plain background
+gradient: colored swirling fluid ribbons, a breathing glow, stronger spring
+depth and motion blur while swiping, plus Android 13+ lens distortion of the
+album art itself. The vortex responds to the selected cover color and the
+player's playing/paused state. This is *not* true audio-spectrum/beat
+synchronization. Android's reduced-motion and low-memory conditions receive a
+lighter fallback. The metadata editor carousel stays calm and accessible.
+
+Visual concept inspired by [Inspora: Fluid liquid card carousel](https://www.inspora.design/posts/fluid-liquid-card-carousel).
+
+## Music library and playback additions (development branch)
+
+- **Automatic folder restoration:** after choosing a folder through Android SAF, Music Magic remembers the tree URI and rescans it at launch. If the provider revokes permission, choose the folder again.
+- **Mini player in the editor:** the current track, artwork and pause/next controls appear above the library.
+- **Favorites and named playlists:** on-device preferences only. Add/remove the selected song, create/delete named lists, play a list as a Media3 queue. Deleting a playlist never deletes audio files.
+- **Lyrics:** play the selected/playing track and open **가사 보기** to see embedded plain lyrics or synchronized LRC lines. Tap a timed line to seek.
+- **Cover on the lock screen:** Media3 playback session asynchronously adds compact embedded artwork to the current song's metadata.
+- **Save safety:** saving original files, batch saves and Undo stop the media session queue beforehand if the affected file is referenced, avoiding simultaneous playback while its bytes change.
+
+This functionality is in source and is subject to the latest Android CI and real-device confirmation; **the older Release APK linked above does not contain it.**
+
+## New: iOS-inspired UI (development branch)
+
+The [Fluid Music Player PR #1](https://github.com/homesweetlove/Music_Magic-/pull/1) now includes an
+Apple Music-inspired now-playing screen, artwork-reactive ambient colors, a
+translucent playback sheet, an Up Next preview, larger headings, rounded grouped
+editor cards, a custom navigation drawer, and system light/dark appearance.
+These elements are built in Jetpack Compose for Android; they do not include
+Apple's proprietary UI resources or native iOS Liquid Glass.
+
+See [design system notes](docs/DESIGN.md). **The release APK linked above
+is the older version; a verified new APK has not been published yet.**
+
 ## 할 수 있는 일 · Features
 
 앱 안의 표시만 바꾸는 대신 **실제 오디오 파일에 메타데이터를 기록**합니다. 기본 저장은 선택한 원본 파일을 덮어씁니다.<br />
@@ -61,10 +169,13 @@ Music Magic writes **metadata into the actual audio file**. Saving overwrites th
 | **파일 · Files** | SAF로 파일·폴더 선택, 확장자를 유지한 이름 변경 및 아티스트/제목 기반 정리 | Select files/folders through Android SAF; rename using artist/title while preserving the extension |
 | **정리 · Library** | 폴더 내 아티스트/앨범 일괄 편집, SHA-256 완전 동일 파일 탐지 | Batch-edit artist/album in a folder; find byte-identical files with SHA-256 |
 | **탐색 · Browse** | Liquid Music 앨범/모든 곡 캐러셀, 표지 기반 색상, 라이트·다크 모드 | Liquid Music album/all-track carousel, artwork-derived colors and light/dark themes |
+| **플레이어 · Player** | 햄버거 메뉴로 편집기↔음악 재생 전환, 표지 색상 반응형 배경, 큐·탐색·셔플·반복·백그라운드 재생 | Drawer navigation, artwork-reactive background, queue/seek/shuffle/repeat and background playback |
 | **저장 · Save** | 변경 미리보기, 원본 덮어쓰기 검증, 마지막 저장 백업 복원 | Preview changes, verify source overwrites and restore the last-save backup |
 | **내보내기 · Export** | PCM WAV / AAC M4A 변환, 성공한 결과와 원본의 Before/After 비교 재생 | Export PCM WAV / AAC M4A; compare the actual source with a successful export |
 | **곡 정보 · Lookup** | 선택적으로 MusicBrainz 검색 실행 — 인터넷 필요 | Optional, explicitly requested MusicBrainz lookup — internet required |
 | **로컬 편집 · Local editing** | 메타데이터 편집은 오프라인으로 사용. 로그인·자체 서버·광고 없음 | Edit metadata offline. No app login, app backend or ads |
+
+**재생 지원:** 편집 가능한 모든 확장자가 모든 Android 기기에서 재생되는 것은 아닙니다. 실제 재생 가능 여부는 기기의 Media3/시스템 코덱에 따라 달라집니다.
 
 **메타데이터 형식 / Metadata formats**<br />
 MP3 · FLAC · M4A/M4B/MP4 · OGG/OGA · Opus · WAV · AIF/AIFF · WMA · DSF
@@ -81,6 +192,8 @@ MP3 · FLAC · M4A/M4B/MP4 · OGG/OGA · Opus · WAV · AIF/AIFF · WMA · DSF
 | **1** | 파일이나 폴더를 선택하고 접근 권한을 허용합니다. | Choose a file or folder and grant access. |
 | **2** | 앨범 → **곡 보기** → **정보 편집**에서 태그·표지·가사를 수정합니다. | Browse an album → **곡 보기** (view tracks) → **정보 편집** (edit metadata). |
 | **3** | 변경 내용을 미리 보고 저장합니다. 변환은 별도의 WAV/M4A 내보내기를 사용합니다. | Preview changes and save. Use the separate WAV/M4A export action for conversion. |
+
+**왼쪽 상단 메뉴 → 뮤직 플레이어**를 누르면 선택한 폴더의 곡을 연속 재생할 수 있습니다. 앨범 카드를 넘기거나 **이 곡 재생**을 누르세요. Android 미디어 세션을 통해 백그라운드·잠금 화면에서도 제어할 수 있습니다. 플레이어는 로컬 파일만 재생하며 스트리밍 서비스와 연동하지 않습니다.
 
 **모든 곡**은 하위 폴더를 포함해 최대 500곡을 표시합니다. 스와이프는 탐색만 수행하며, 저장·재생은 버튼으로 실행합니다.<br />
 **모든 곡** (all tracks) shows up to 500 discovered tracks, including nested folders. Swipes browse cards; buttons perform writes and start playback.

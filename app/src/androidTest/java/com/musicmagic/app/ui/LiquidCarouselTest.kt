@@ -6,6 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -156,6 +158,24 @@ class LiquidCarouselTest {
         compose.onNodeWithText("여름의 기록").assertExists()
         compose.onNodeWithContentDescription("다음 카드").performScrollTo().performClick()
         compose.onNodeWithContentDescription("다음 카드").assertIsNotEnabled()
+    }
+
+    @Test fun immersivePortalDrawsAndSwipesOnAndroid10And15() {
+        compose.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                Box(Modifier.fillMaxSize()) {
+                    LiquidVortexBackdrop(
+                        accent = Color(0xFFC35CF2),
+                        playing = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    LiquidCardCarousel(items, immersive = true, onAction = {})
+                }
+            }
+        }
+        compose.onNodeWithContentDescription("다음 카드").performClick()
+        compose.onNodeWithContentDescription("다음 카드").assertIsNotEnabled()
+        // Also exercises Android 13+ RuntimeShader lens compilation when supported.
     }
 
     @Test fun disabledSystemAnimationStillAllowsNavigation() {

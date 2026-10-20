@@ -24,6 +24,8 @@ data class LibraryTrack(
     val album: String,
     val albumArtist: String,
     val quality: String,
+    val modifiedAt: Long = 0L,
+    val folderName: String = "",
 )
 
 data class CoverArt(val bitmap: Bitmap?, val accent: Color)
@@ -80,6 +82,10 @@ object LibraryMedia {
     private val covers = object : LruCache<String, CoverArt>(8 * 1024 * 1024) {
         override fun sizeOf(key: String, value: CoverArt) = value.bitmap?.allocationByteCount ?: 64
     }
+    /** Call after successful metadata/artwork writes; cached bitmaps are not recycled. */
+    fun invalidateArtwork() {
+        covers.evictAll()
+    }
 
     suspend fun scan(context: Context, tree: Uri, onProgress: (Int) -> Unit): List<LibraryTrack> {
         val queue = ArrayDeque<DocumentFile>()
@@ -95,7 +101,8 @@ object LibraryMedia {
                 if (tracks.size >= 500) break
                 if (file.isDirectory) queue.add(file)
                 else if (file.isFile && file.name?.substringAfterLast('.', "")?.lowercase() in extensions) {
-                    tracks.add(readTrack(context, file.uri, file.name ?: "음악 파일"))
+                    tracks.add(readTrack(context, file.uri, file.name ?: "음악 파일",
+                        file.lastModified(), directory.name.orEmpty()))
                     onProgress(tracks.size)
                 }
             }
@@ -103,8 +110,8 @@ object LibraryMedia {
         return tracks
     }
 
-    fun readTrack(context: Context, uri: Uri, name: String): LibraryTrack {
-        val fallback = LibraryTrack(uri, name, name.substringBeforeLast('.', name), "알 수 없는 아티스트", "앨범 정보 없음", "", name.substringAfterLast('.', "AUDIO").uppercase())
+    fun readTrack(context: Context, uri: Uri, name: String, modifiedAt: Long = 0L, folderName: String = ""): LibraryTrack {
+        val fallback = LibraryTrack(uri, name, name.substringBeforeLast('.', name), "알 수 없는 아티스트", "앨범 정보 없음", "", name.substringAfterLast('.', "AUDIO").uppercase(), modifiedAt, folderName)
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
@@ -130,9 +137,11 @@ object LibraryMedia {
         val retriever = MediaMetadataRetriever()
         val bitmap = try {
             retriever.setDataSource(context, uri)
-            retriever.embeddedPicture?.takeIf { it.size <= 16 * 1024 * 1024 }?.let(::thumbnail)
+            val embedded = retriever.embeddedPicture?.takeIf { it.size <= 16 * 1024 * 1024 }
+                ?: com.musicmagic.app.WavRiffTags.embeddedArtwork(context, uri)
+            embedded?.let(::thumbnail)
         } catch (_: Exception) {
-            null
+            com.musicmagic.app.WavRiffTags.embeddedArtwork(context, uri)?.let(::thumbnail)
         } finally {
             runCatching { retriever.release() }
         }
@@ -152,14 +161,37 @@ object LibraryMedia {
     }
 
     fun accent(bitmap: Bitmap?): Color {
-        if (bitmap == null) return Color(0xFF0A84FF)
-        var r = 0L; var g = 0L; var b = 0L; var count = 0
-        // A bounded 8x8 sample; no full-size pixel array or per-frame work.
+        if (bitmap == null) return Color(0xFF6389C8)
+        // Sample only 64 pixels, cluster saturated colors by hue, and avoid averaging
+        // colorful covers into a muddy gray. No heavy Palette dependency or per-frame work.
+        val counts = IntArray(12)
+        val reds = LongArray(12)
+        val greens = LongArray(12)
+        val blues = LongArray(12)
+        val hsv = FloatArray(3)
+        var allR = 0L; var allG = 0L; var allB = 0L; var allCount = 0
         for (y in 0 until 8) for (x in 0 until 8) {
             val pixel = bitmap.getPixel(x * bitmap.width / 8, y * bitmap.height / 8)
             if (android.graphics.Color.alpha(pixel) < 128) continue
-            r += android.graphics.Color.red(pixel); g += android.graphics.Color.green(pixel); b += android.graphics.Color.blue(pixel); count++
+            val r = android.graphics.Color.red(pixel)
+            val g = android.graphics.Color.green(pixel)
+            val b = android.graphics.Color.blue(pixel)
+            allR += r; allG += g; allB += b; allCount++
+            android.graphics.Color.colorToHSV(pixel, hsv)
+            if (hsv[1] < 0.22f || hsv[2] < 0.13f) continue
+            val bucket = (hsv[0] / 30f).toInt().coerceIn(0, 11)
+            counts[bucket]++
+            reds[bucket] += r; greens[bucket] += g; blues[bucket] += b
         }
-        return if (count == 0) Color(0xFF0A84FF) else Color((r / count).toInt(), (g / count).toInt(), (b / count).toInt())
+        if (allCount == 0) return Color(0xFF6389C8)
+        val dominant = counts.indices.maxByOrNull { counts[it] } ?: 0
+        if (counts[dominant] < 3) return Color(
+            (allR / allCount).toInt(), (allG / allCount).toInt(), (allB / allCount).toInt(),
+        )
+        return Color(
+            (reds[dominant] / counts[dominant]).toInt(),
+            (greens[dominant] / counts[dominant]).toInt(),
+            (blues[dominant] / counts[dominant]).toInt(),
+        )
     }
 }

@@ -6,22 +6,47 @@ import android.os.Bundle
 import android.media.MediaPlayer
 import androidx.documentfile.provider.DocumentFile
 import java.security.MessageDigest
+import java.io.File
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.musicmagic.app.library.LibraryMedia
 import com.musicmagic.app.library.LibraryTrack
+import com.musicmagic.app.library.MusicCollections
 import com.musicmagic.app.ui.AudioComparison
 import com.musicmagic.app.ui.AudioComparisonCarousel
 import com.musicmagic.app.ui.MusicLibraryCarousel
 import com.musicmagic.app.ui.SelectedMusicCarousel
+import com.musicmagic.app.ui.GlassIconButton
+import com.musicmagic.app.ui.MagicButton
+import com.musicmagic.app.ui.MagicTypography
+import com.musicmagic.app.ui.AlbumArtworkDialog
+import com.musicmagic.app.ui.BatchTrackPicker
+import com.musicmagic.app.ui.EditHistoryPanel
+import com.musicmagic.app.player.MusicPlayerScreen
+import com.musicmagic.app.player.MiniPlayerBar
+import com.musicmagic.app.player.PlaybackService
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,12 +70,24 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -73,11 +110,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val IosBlue = Color(0xFF0A84FF)
+private val IosBlue = Color(0xFF007AFF)
 private val IosGreen = Color(0xFF30D158)
 private val IosOrange = Color(0xFFFF9F0A)
 private val LightBackground = Color(0xFFF2F2F7)
-private val DarkBackground = Color(0xFF000000)
+private val DarkBackground = Color(0xFF09090C)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -106,11 +143,18 @@ private fun MusicMagicApp() {
     var folderFiles by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var libraryTracks by remember { mutableStateOf<List<LibraryTrack>>(emptyList()) }
     var libraryRevision by remember { mutableIntStateOf(0) }
+    var currentScreen by remember { mutableStateOf("editor") }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     var comparison by remember { mutableStateOf<AudioComparison?>(null) }
     var exportSource by remember { mutableStateOf<Pair<Uri, AudioInfo>?>(null) }
     var batchStatus by remember { mutableStateOf("") }
     var batchArtist by remember { mutableStateOf("") }
     var batchAlbum by remember { mutableStateOf("") }
+    var batchArtworkBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var batchEditingUri by remember { mutableStateOf<Uri?>(null) }
+    var batchSelectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var historyRevision by remember { mutableIntStateOf(0) }
+    var askClearHistory by remember { mutableStateOf(false) }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     val lifecycle = (context as ComponentActivity).lifecycle
     DisposableEffect(lifecycle) {
@@ -124,9 +168,44 @@ private fun MusicMagicApp() {
         onDispose { lifecycle.removeObserver(observer); player?.release(); player = null }
     }
     var artworkBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var artworkRemoved by remember { mutableStateOf(false) }
+    var artworkEditingUri by remember { mutableStateOf<Uri?>(null) }
+    var existingArtworkTemp by remember { mutableStateOf<File?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var success by remember { mutableStateOf(false) }
+
+    // Restore a stored SAF grant by rescanning. Never cache raw audio bytes in prefs.
+    LaunchedEffect(Unit) {
+        MusicCollections.lastTree(context)?.let { tree ->
+            val permitted = context.contentResolver.persistedUriPermissions.any {
+                it.isReadPermission && it.uri == tree
+            }
+            if (!permitted) {
+                MusicCollections.forgetTree(context)
+                batchStatus = "기존 음악 폴더 접근 권한이 만료됐어요. 다시 선택해주세요."
+                return@LaunchedEffect
+            }
+            busy = true
+            batchStatus = "이전에 선택한 음악 폴더를 복원하는 중…"
+            val result = runCatching { withContext(Dispatchers.IO) {
+                LibraryMedia.scan(context, tree) { }
+            } }
+            result.fold(
+                onSuccess = { tracks ->
+                    libraryTracks = tracks
+                    folderFiles = tracks.map { it.uri }
+                    batchSelectedIds = tracks.mapTo(mutableSetOf()) { it.uri.toString() }
+                    batchStatus = "${tracks.size}곡 복원 완료"
+                },
+                onFailure = {
+                    MusicCollections.forgetTree(context)
+                    batchStatus = "폴더 복원 실패: ${it.message ?: "다시 폴더를 선택해주세요."}"
+                },
+            )
+            busy = false
+        }
+    }
 
     fun preview(uri: Uri) {
         player?.release()
@@ -161,9 +240,26 @@ private fun MusicMagicApp() {
         track = info.track
         lyrics = info.lyrics
         artworkBytes = null
+        artworkRemoved = false
+    }
+
+    fun openEditor(uri: Uri) {
+        if (busy) return
+        selectedUri = uri
+        comparison = null
+        busy = true
+        currentScreen = "editor"
+        scope.launch {
+            val loaded = withContext(Dispatchers.IO) { AudioMetadata.read(context, uri) }
+            applyInfo(loaded)
+            status = loaded.error.orEmpty()
+            busy = false
+        }
     }
 
     fun updateLibrary(oldUri: Uri, saved: SaveResult) {
+        LibraryMedia.invalidateArtwork()
+        MusicCollections.replaceUri(context, oldUri, saved.uri)
         libraryTracks = libraryTracks.map { entry ->
             if (LibraryMedia.sameDocument(entry.uri, oldUri)) LibraryMedia.updated(entry, saved.uri, saved.info) else entry
         }
@@ -235,6 +331,8 @@ private fun MusicMagicApp() {
                 result.fold(onSuccess = { tracks ->
                     libraryTracks = tracks
                     folderFiles = tracks.map { it.uri }
+                    batchSelectedIds = tracks.mapTo(mutableSetOf()) { it.uri.toString() }
+                    MusicCollections.rememberTree(context, uri)
                     batchStatus = "${tracks.size}개 음악 파일을 찾았어요. (최대 500곡)"
                 }, onFailure = { batchStatus = "폴더를 읽을 수 없습니다: ${it.message}" })
                 busy = false
@@ -243,17 +341,12 @@ private fun MusicMagicApp() {
     }
 
     val artPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            busy = true
-            scope.launch {
-                val result = withContext(Dispatchers.IO) { LibraryMedia.prepareArtwork(context, uri) }
-                result.fold(onSuccess = {
-                    artworkBytes = it
-                    status = "앨범아트를 최대 1000px JPEG로 최적화했어요. 저장하면 음악 파일에 기록됩니다."
-                }, onFailure = { status = it.message ?: "이미지를 읽을 수 없습니다." })
-                busy = false
-            }
-        }
+        existingArtworkTemp?.delete()
+        existingArtworkTemp = null
+        artworkEditingUri = uri
+    }
+    val batchArtPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        batchEditingUri = uri
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -279,89 +372,292 @@ private fun MusicMagicApp() {
 
     val colors = if (dark) {
         darkColorScheme(
-            primary = IosBlue,
+            primary = Color(0xFF0A84FF),
+            onPrimary = Color.White,
             background = DarkBackground,
+            onBackground = Color(0xFFF5F5F7),
             surface = Color(0xFF1C1C1E),
-            surfaceVariant = Color(0xFF2C2C2E),
+            onSurface = Color(0xFFF5F5F7),
+            surfaceVariant = Color(0xFF29292D),
+            onSurfaceVariant = Color(0xFFC7C7CC),
+            secondaryContainer = Color(0xFF1D3048),
+            onSecondaryContainer = Color(0xFF91C6FF),
         )
     } else {
         lightColorScheme(
             primary = IosBlue,
+            onPrimary = Color.White,
             background = LightBackground,
+            onBackground = Color(0xFF1C1C1E),
             surface = Color.White,
-            surfaceVariant = Color(0xFFE5E5EA),
+            onSurface = Color(0xFF1C1C1E),
+            surfaceVariant = Color(0xFFE9E9EE),
+            onSurfaceVariant = Color(0xFF636366),
+            secondaryContainer = Color(0xFFE5F0FF),
+            onSecondaryContainer = Color(0xFF0065CF),
         )
     }
 
-    MaterialTheme(colorScheme = colors) {
+    MaterialTheme(colorScheme = colors, typography = MagicTypography) {
+        artworkEditingUri?.let { imageUri ->
+            AlbumArtworkDialog(
+                uri = imageUri,
+                onDismiss = {
+                    artworkEditingUri = null
+                    existingArtworkTemp?.delete(); existingArtworkTemp = null
+                },
+                onSave = { bytes ->
+                    artworkBytes = bytes
+                    artworkRemoved = false
+                    artworkEditingUri = null
+                    existingArtworkTemp?.delete(); existingArtworkTemp = null
+                    status = "앨범 표지 편집 완료 · 저장을 누르면 음악 파일에 반영됩니다."
+                },
+                onRemove = {
+                    artworkRemoved = true
+                    artworkBytes = null
+                    artworkEditingUri = null
+                    existingArtworkTemp?.delete(); existingArtworkTemp = null
+                    status = "앨범 표지 삭제 선택됨 · 저장을 누르면 반영됩니다."
+                },
+            )
+        }
+        batchEditingUri?.let { imageUri ->
+            AlbumArtworkDialog(
+                uri = imageUri,
+                onDismiss = { batchEditingUri = null },
+                onSave = { bytes ->
+                    batchArtworkBytes = bytes
+                    batchEditingUri = null
+                    batchStatus = "여러 곡에 적용할 표지가 준비됐어요."
+                },
+                onRemove = {
+                    batchArtworkBytes = null
+                    batchEditingUri = null
+                },
+            )
+        }
+        if (askClearHistory) {
+            AlertDialog(
+                onDismissRequest = { askClearHistory = false },
+                title = { Text("변경 기록 삭제") },
+                text = { Text("이전 버전 백업까지 기기에서 삭제됩니다. 삭제 후 복구할 수 없습니다.") },
+                confirmButton = { TextButton(onClick = {
+                    EditHistory.clear(context)
+                    historyRevision++
+                    askClearHistory = false
+                }) { Text("삭제") } },
+                dismissButton = { TextButton(onClick = { askClearHistory = false }) { Text("취소") } },
+            )
+        }
         val info = originalInfo
         val originalExtension = info?.fileName?.substringAfterLast('.', "")?.lowercase().orEmpty()
         val requestedExtension = fileName.substringAfterLast('.', "").lowercase()
         val extensionChanged = info != null && requestedExtension != originalExtension
         val editable = info?.supported == true && selectedUri != null
 
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(
+        val playbackTracks = if (libraryTracks.isNotEmpty()) libraryTracks else selectedUri?.let { uri ->
+            info?.let { meta ->
+                listOf(LibraryTrack(
+                    uri = uri, fileName = meta.fileName,
+                    title = meta.title.ifBlank { meta.fileName }, artist = meta.artist.ifBlank { "알 수 없는 아티스트" },
+                    album = meta.album.ifBlank { "앨범 정보 없음" }, albumArtist = meta.albumArtist,
+                    quality = meta.format,
+                ))
+            }
+        }.orEmpty()
+
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(
+                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface,
+                ) {
+                    Spacer(Modifier.height(34.dp))
+                    Row(Modifier.padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(54.dp).background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(18.dp)
+                            ),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(29.dp)) }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("Music Magic", style = MaterialTheme.typography.headlineSmall)
+                            Text("YOUR SOUND STUDIO", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                fontSize = 10.sp, letterSpacing = 1.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(36.dp))
+                    Text("LIBRARY", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.46f),
+                        fontSize = 11.sp, letterSpacing = 1.5.sp,
+                        modifier = Modifier.padding(start = 27.dp, bottom = 9.dp))
+                    NavigationDrawerItem(
+                        label = { Text("음악 정보 편집", fontWeight = FontWeight.Medium) },
+                        selected = currentScreen == "editor",
+                        icon = { Icon(Icons.Rounded.Edit, null) },
+                        onClick = { currentScreen = "editor"; scope.launch { drawerState.close() } },
+                        shape = RoundedCornerShape(19.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.11f),
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                        ),
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                    NavigationDrawerItem(
+                        label = { Text("뮤직 플레이어", fontWeight = FontWeight.Medium) },
+                        selected = currentScreen == "player",
+                        icon = { Icon(Icons.Rounded.Headphones, null) },
+                        onClick = { currentScreen = "player"; scope.launch { drawerState.close() } },
+                        shape = RoundedCornerShape(19.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.11f),
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                        ),
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text("MADE FOR YOUR MUSIC", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        fontSize = 10.sp, letterSpacing = 1.2.sp,
+                        modifier = Modifier.padding(start = 27.dp, bottom = 32.dp))
+                }
+            },
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                AnimatedContent(
+                    targetState = currentScreen,
+                    transitionSpec = {
+                        if (targetState == "player") {
+                            (slideInVertically(
+                                initialOffsetY = { it },
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow),
+                            ) + scaleIn(initialScale = .91f, animationSpec = tween(340)) +
+                                fadeIn(tween(280))) togetherWith
+                                (fadeOut(tween(170)) + scaleOut(targetScale = .96f, animationSpec = tween(210)))
+                        } else {
+                            (fadeIn(tween(260)) + scaleIn(initialScale = .98f, animationSpec = tween(290))) togetherWith
+                                (slideOutVertically(targetOffsetY = { it }, animationSpec = tween(320)) +
+                                    fadeOut(tween(240)))
+                        }
+                    },
+                    label = "Music Magic screen",
+                ) { screen ->
+                    if (screen == "player") {
+                        MusicPlayerScreen(
+                            tracks = playbackTracks,
+                            revision = libraryRevision,
+                            onMenu = { scope.launch { drawerState.open() } },
+                            onPickFolder = { folderPicker.launch(null) },
+                            onPickFile = { picker.launch(arrayOf("audio/*", "application/ogg", "application/octet-stream")) },
+                            onEdit = ::openEditor,
+                        )
+                    } else {
+                        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                        Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .safeDrawingPadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 116.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Spacer(Modifier.height(18.dp))
-
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    GlassIconButton(
+                        icon = Icons.Rounded.Menu, contentDescription = "메뉴 열기",
+                        onClick = { scope.launch { drawerState.open() } },
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.095f),
+                        shape = RoundedCornerShape(30.dp),
+                    ) {
+                        Text("●  OFFLINE STUDIO", modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
+                            fontSize = 10.sp, letterSpacing = 1.sp)
+                    }
+                }
+                Spacer(Modifier.height(1.dp))
+                Text("Music Magic", style = MaterialTheme.typography.displayLarge)
                 Text(
-                    text = "Music Magic",
-                    fontSize = 36.sp,
-                    lineHeight = 40.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "파일 자체의 음악 정보를 바꿔요.",
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f),
+                    text = "당신의 음악, 더 아름답게.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                     fontSize = 16.sp,
                 )
-
-                if (libraryTracks.isNotEmpty()) {
-                    MusicLibraryCarousel(libraryTracks, busy, libraryRevision, onSelect = { uri ->
-                        if (!busy) {
-                            selectedUri = uri
-                            comparison = null
-                            busy = true
-                            scope.launch {
-                                val loaded = withContext(Dispatchers.IO) { AudioMetadata.read(context, uri) }
-                                applyInfo(loaded)
-                                status = loaded.error.orEmpty()
-                                busy = false
-                            }
+                Surface(
+                    shape = RoundedCornerShape(25.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (dark) 0.14f else 0.075f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.padding(horizontal = 18.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(52.dp).background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                RoundedCornerShape(17.dp),
+                            ), contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Rounded.Headphones, null, tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp))
                         }
-                    })
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("나만의 뮤직 스튜디오", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("앨범 감상부터 메타데이터 편집까지",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f))
+                        }
+                        GlassIconButton(
+                            icon = Icons.Rounded.Headphones, contentDescription = "뮤직 플레이어 열기",
+                            onClick = { currentScreen = "player" },
+                            tint = MaterialTheme.colorScheme.primary,
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+
+                 if (libraryTracks.isNotEmpty()) {
+                    MusicLibraryCarousel(libraryTracks, busy, libraryRevision, onSelect = ::openEditor)
                 }
 
                 SectionCard(title = "폴더 · 일괄 편집", icon = Icons.Rounded.FolderOpen) {
-                    Button(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
-                    Text("${folderFiles.size}곡 선택됨")
+                    MagicButton(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
+                    Text("${folderFiles.size}곡 검색됨")
+                    BatchTrackPicker(
+                        tracks = libraryTracks,
+                        selected = batchSelectedIds,
+                        onChange = { batchSelectedIds = it },
+                        enabled = !busy,
+                    )
                     EditorField("일괄 아티스트 (빈칸은 유지)", batchArtist, { batchArtist = it })
                     EditorField("일괄 앨범 (빈칸은 유지)", batchAlbum, { batchAlbum = it })
-                    Button(onClick = {
+                    MagicButton(onClick = { batchArtPicker.launch("image/*") }, enabled = !busy) {
+                        Text(if (batchArtworkBytes == null) "공통 앨범 표지 선택" else "표지 준비 완료 · 다시 선택")
+                    }
+                    MagicButton(onClick = {
+                        val targets = folderFiles.filter { it.toString() in batchSelectedIds }
+                        player?.release(); player = null
+                        PlaybackService.stopForEditing(targets)
                         busy = true
                         scope.launch {
                             val (message, savedFiles) = withContext(Dispatchers.IO) {
                                 var ok = 0
                                 val errors = mutableListOf<String>()
                                 val savedFiles = mutableListOf<Pair<Uri, SaveResult>>()
-                                for (uri in folderFiles) {
+                                for (uri in targets) {
                                     val info = AudioMetadata.read(context, uri)
                                     if (!info.supported) { errors.add(info.fileName); continue }
                                     val edits = AudioEdits(info.fileName, info.title,
                                         batchArtist.ifBlank { info.artist }, batchAlbum.ifBlank { info.album },
-                                        info.albumArtist, info.genre, info.year, info.track, info.lyrics)
+                                        info.albumArtist, info.genre, info.year, info.track, info.lyrics,
+                                        artwork = batchArtworkBytes)
                                     AudioMetadata.save(context, uri, edits).fold(onSuccess = {
                                         ok++; savedFiles.add(uri to it)
                                     }, onFailure = { errors.add(info.fileName) })
                                 }
-                                ("$ok/${folderFiles.size}곡 저장 성공" + if (errors.isNotEmpty()) " · 실패: " + errors.take(5).joinToString() else "") to savedFiles
+                                ("$ok/${targets.size}곡 저장 성공" + if (errors.isNotEmpty()) " · 실패: " + errors.take(5).joinToString() else "") to savedFiles
                             }
                             batchStatus = message
                             savedFiles.forEach { (old, saved) ->
@@ -374,11 +670,13 @@ private fun MusicMagicApp() {
                                 }
                             }
                             libraryRevision++
+                            historyRevision++
                             comparison = null
                             busy = false
                         }
-                    }, enabled = !busy && folderFiles.isNotEmpty() && (batchArtist.isNotBlank() || batchAlbum.isNotBlank())) { Text("선택 폴더 일괄 저장") }
-                    Button(onClick = {
+                    }, enabled = !busy && batchSelectedIds.isNotEmpty() &&
+                        (batchArtist.isNotBlank() || batchAlbum.isNotBlank() || batchArtworkBytes != null)) { Text("선택 폴더 일괄 저장") }
+                    MagicButton(onClick = {
                         busy = true
                         scope.launch {
                             batchStatus = withContext(Dispatchers.IO) {
@@ -409,7 +707,9 @@ private fun MusicMagicApp() {
                     }
                 }
 
-                Button(onClick = {
+                MagicButton(onClick = {
+                    player?.release(); player = null
+                    PlaybackService.stopForEditing(emptyList())
                     busy = true
                     scope.launch {
                         val undoPrefs = context.getSharedPreferences("musicmagic", android.content.Context.MODE_PRIVATE)
@@ -418,6 +718,7 @@ private fun MusicMagicApp() {
                         val result = withContext(Dispatchers.IO) { AudioMetadata.undoLastWithUri(context) }
                         result.fold(
                             onSuccess = { saved ->
+                                LibraryMedia.invalidateArtwork()
                                 oldUri?.let { updateLibrary(it, saved) }
                                 if (selectedUri?.let { oldUri != null && LibraryMedia.sameDocument(it, oldUri) } == true) {
                                     selectedUri = saved.uri
@@ -432,6 +733,41 @@ private fun MusicMagicApp() {
                         busy = false
                     }
                 }, enabled = !busy) { Text("↶ 마지막 저장 실행 취소") }
+
+                SectionCard(title = "변경 내역 · 원본 복원", icon = Icons.Rounded.Edit) {
+                    val entries = remember(historyRevision) { EditHistory.list(context) }
+                    EditHistoryPanel(
+                        entries = entries,
+                        busy = busy,
+                        onClear = { askClearHistory = true },
+                        onRestore = { entry ->
+                            val previousUri = Uri.parse(entry.uri)
+                            player?.release(); player = null
+                            PlaybackService.stopForEditing(listOf(previousUri))
+                            busy = true
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    EditHistory.restore(context, entry.id)
+                                }
+                                result.fold(onSuccess = { saved ->
+                                    updateLibrary(previousUri, saved)
+                                    if (selectedUri?.let { LibraryMedia.sameDocument(it, previousUri) } == true) {
+                                        selectedUri = saved.uri
+                                        applyInfo(saved.info)
+                                    }
+                                    historyRevision++
+                                    libraryRevision++
+                                    status = "변경 기록으로 파일을 복원했습니다: " + saved.info.fileName
+                                    success = true
+                                }, onFailure = {
+                                    status = "기록 복원 실패: " + it.message
+                                    success = false
+                                })
+                                busy = false
+                            }
+                        },
+                    )
+                }
 
                 FilePickerCard(
                     info = info,
@@ -454,10 +790,10 @@ private fun MusicMagicApp() {
                                 onArt = { artPicker.launch("image/*") }, onPlay = { preview(uri) })
                         }
                     }
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         selectedUri?.let(::preview)
                     }, enabled = !busy) { Text("▶ 음악 미리듣기") }
-                    Button(onClick = { player?.release(); player = null }, enabled = player != null) { Text("■ 재생 정지") }
+                    MagicButton(onClick = { player?.release(); player = null }, enabled = player != null) { Text("■ 재생 정지") }
                     SectionCard(title = "음악 정보", icon = Icons.Rounded.MusicNote) {
                         EditorField("제목", title, { title = it })
                         DividerInset()
@@ -468,7 +804,7 @@ private fun MusicMagicApp() {
                         EditorField("앨범 아티스트", albumArtist, { albumArtist = it })
                     }
 
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         busy = true
                         scope.launch {
                             val result = withContext(Dispatchers.IO) { MusicBrainzLookup.search(title, artist) }
@@ -495,7 +831,7 @@ private fun MusicMagicApp() {
                     }
 
                     SectionCard(title = "빠른 태그 정리", icon = Icons.Rounded.Edit) {
-                        Button(onClick = {
+                        MagicButton(onClick = {
                             val base = fileName.substringBeforeLast('.', fileName)
                             val parts = base.split(" - ", limit = 2)
                             if (parts.size == 2) {
@@ -504,7 +840,7 @@ private fun MusicMagicApp() {
                                 status = "파일명에서 아티스트·제목을 추출했어요. 확인 후 저장하세요."
                             } else status = "파일명이 '아티스트 - 제목' 형식이어야 합니다."
                         }) { Text("파일명에서 제목·아티스트 추출") }
-                        Button(onClick = {
+                        MagicButton(onClick = {
                             fun clean(value: String) = value.trim().replace(Regex("\\s+"), " ")
                             title = clean(title); artist = clean(artist); album = clean(album)
                             albumArtist = clean(albumArtist); genre = clean(genre)
@@ -521,29 +857,54 @@ private fun MusicMagicApp() {
                     }
 
                     SectionCard(title = "앨범아트", icon = Icons.Rounded.MusicNote) {
-                        Button(onClick = { artPicker.launch("image/*") }, enabled = !busy) {
-                            Text(if (artworkBytes == null) "표지 이미지 선택" else "새 표지 선택됨 · 변경하기")
+                        MagicButton(onClick = {
+                            val audio = selectedUri ?: return@MagicButton
+                            busy = true
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching { ArtworkEditing.extractEmbedded(context, audio) }
+                                }
+                                result.fold(onSuccess = { file ->
+                                    existingArtworkTemp?.delete()
+                                    existingArtworkTemp = file
+                                    artworkEditingUri = Uri.fromFile(file)
+                                }, onFailure = {
+                                    status = it.message ?: "기존 표지를 읽을 수 없습니다."
+                                })
+                                busy = false
+                            }
+                        }, enabled = !busy && selectedUri != null) { Text("현재 표지 바로 편집") }
+                        MagicButton(onClick = { artPicker.launch("image/*") }, enabled = !busy) {
+                            Text(if (artworkBytes == null) "표지 편집 · 자르기 · 회전" else "편집된 표지 다시 변경")
                         }
+                        MagicButton(onClick = {
+                            artworkBytes = null
+                            artworkRemoved = true
+                            status = "표지 제거를 선택했어요. 저장 버튼을 눌러 적용하세요."
+                        }, enabled = !busy) { Text("앨범 커버 제거") }
+                        if (artworkRemoved) Text("표지 제거 예정")
+                        else if (artworkBytes != null)
+                            Text("새 표지 준비 완료 · ${ArtworkEditing.mime(artworkBytes!!)}")
                     }
 
                     SectionCard(title = "오디오 상세", icon = Icons.Rounded.Info) {
                         Text("길이: ${info.durationSeconds}초 · 비트레이트: ${info.bitRate} · 샘플레이트: ${info.sampleRate}")
                     }
 
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         exportSource = selectedUri?.let { it to info }
                         val base = info.fileName.substringBeforeLast('.', info.fileName)
                         wavPicker.launch(base + ".wav")
                     }, enabled = !busy) { Text("실제 PCM WAV로 변환하여 새 파일 저장") }
 
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         exportSource = selectedUri?.let { it to info }
                         m4aPicker.launch(info.fileName.substringBeforeLast('.', info.fileName) + ".m4a")
                     }, enabled = !busy) { Text("AAC M4A로 실제 인코딩하여 새 파일 저장") }
 
                     SectionCard(title = "파일", icon = Icons.Rounded.AudioFile) {
                         EditorField("파일명 · 확장자", fileName, { fileName = it })
-                        Button(onClick = {
+                        MagicButton(onClick = {
                             val ext = info.fileName.substringAfterLast('.', "")
                             val base = listOf(artist, title).map { it.trim().replace("/", "_").replace(":", "_") }.filter { it.isNotBlank() }.joinToString(" - ")
                             if (base.isNotBlank()) fileName = base + if (ext.isBlank()) "" else "." + ext
@@ -574,6 +935,7 @@ private fun MusicMagicApp() {
                             Text(label + ": " + pair.first.take(48) + " → " + pair.second.take(48))
                         }
                         if (artworkBytes != null) Text("앨범아트: 새 이미지로 변경")
+                        if (artworkRemoved) Text("앨범아트: 표지 제거")
                     }
 
                     if (status.isNotBlank()) {
@@ -584,9 +946,11 @@ private fun MusicMagicApp() {
                         )
                     }
 
-                    Button(
+                    MagicButton(
                         onClick = {
-                            val uri = selectedUri ?: return@Button
+                            val uri = selectedUri ?: return@MagicButton
+                            player?.release(); player = null
+                            PlaybackService.stopForEditing(listOf(uri))
                             busy = true
                             status = ""
                             success = false
@@ -606,6 +970,7 @@ private fun MusicMagicApp() {
                                             track = track,
                                             lyrics = lyrics,
                                             artwork = artworkBytes,
+                                            removeArtwork = artworkRemoved,
                                         ),
                                     )
                                 }
@@ -615,9 +980,12 @@ private fun MusicMagicApp() {
                                         applyInfo(saved.info)
                                         comparison = null
                                         libraryRevision++
+                                        historyRevision++
                                         updateLibrary(uri, saved)
                                         success = true
-                                        status = "원본 파일에 저장했어요. 다른 플레이어에서도 이 메타데이터를 읽을 수 있습니다."
+                                        status = if (saved.convertedFromWav)
+                                             "WAV 앨범아트를 FLAC으로 무손실 변환해 새 파일로 저장했습니다. 기존 WAV 원본은 유지됩니다."
+                                         else "원본 파일에 저장했어요. 다른 플레이어에서도 이 메타데이터를 읽을 수 있습니다."
                                     },
                                     onFailure = { error ->
                                         success = false
@@ -650,6 +1018,15 @@ private fun MusicMagicApp() {
 
                 SupportedFormatsCard()
                 Spacer(Modifier.height(24.dp))
+                        }
+                        MiniPlayerBar(
+                            onExpand = { currentScreen = "player" },
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                                .padding(horizontal = 17.dp, vertical = 12.dp),
+                        )
+                        }
+                    }
+                }
             }
         }
     }
@@ -659,9 +1036,10 @@ private fun MusicMagicApp() {
 private fun FilePickerCard(info: AudioInfo?, busy: Boolean, onPick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        tonalElevation = 0.dp,
-        shadowElevation = 1.dp,
+        shape = RoundedCornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f)),
+        shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -670,8 +1048,8 @@ private fun FilePickerCard(info: AudioInfo?, busy: Boolean, onPick: () -> Unit) 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(50.dp)
-                        .background(IosBlue.copy(alpha = 0.13f), RoundedCornerShape(15.dp)),
+                        .size(54.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -701,14 +1079,14 @@ private fun FilePickerCard(info: AudioInfo?, busy: Boolean, onPick: () -> Unit) 
                     )
                 }
             }
-            Button(
+            MagicButton(
                 onClick = onPick,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(15.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    contentColor = MaterialTheme.colorScheme.primary,
                 ),
             ) {
                 Text(if (info == null) "파일 열기" else "다른 파일 선택")
@@ -723,26 +1101,32 @@ private fun SectionCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
-            modifier = Modifier.padding(start = 4.dp),
+            modifier = Modifier.padding(start = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, null, modifier = Modifier.size(17.dp), tint = IosBlue)
-            Spacer(Modifier.width(6.dp))
+            Icon(icon, null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(7.dp))
             Text(
-                text = title,
-                fontSize = 14.sp,
+                text = title.uppercase(),
+                fontSize = 11.sp,
+                letterSpacing = 1.15.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.54f),
             )
         }
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            shadowElevation = 0.5.dp,
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f)),
+            shadowElevation = 0.dp,
         ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
                 content()
             }
         }
@@ -751,13 +1135,20 @@ private fun SectionCard(
 
 @Composable
 private fun EditorField(label: String, value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
+    TextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label) },
+        label = { Text(label, fontSize = 13.sp) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         shape = RoundedCornerShape(14.dp),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            disabledContainerColor = Color.Transparent,
+            focusedIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+            unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.075f),
+        ),
     )
 }
 
@@ -802,8 +1193,8 @@ private fun Notice(text: String, color: Color, success: Boolean = false) {
 private fun SupportedFormatsCard() {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(22.dp),
     ) {
         Column(modifier = Modifier.padding(15.dp)) {
             Text("지원 형식", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)

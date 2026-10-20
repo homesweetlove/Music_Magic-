@@ -9,6 +9,12 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -32,6 +38,7 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -117,6 +124,8 @@ fun LiquidCardCarousel(
     modifier: Modifier = Modifier,
     onAction: (LiquidCardItem) -> Unit,
     onSettled: ((LiquidCardItem) -> Unit)? = null,
+    immersive: Boolean = false,
+    playing: Boolean = false,
 ) {
     val ids = remember(items) {
         items.map { it.id }.also { keys ->
@@ -213,6 +222,7 @@ fun LiquidCardCarousel(
     val pageDescription = "${items.size}개 중 ${settledPage + 1}번째 카드"
 
     Column(modifier.semantics { isTraversalGroup = true }) {
+        Box(Modifier.fillMaxWidth()) {
         HorizontalPager(
             state = pager,
             modifier = Modifier.fillMaxWidth(),
@@ -227,6 +237,8 @@ fun LiquidCardCarousel(
             LiquidCarouselCard(
                 item = item,
                 dark = dark,
+                immersive = immersive,
+                playing = playing,
                 motionEnabled = motionEnabled,
                 allowBlur = motionEnabled && !lowRam && Build.VERSION.SDK_INT >= 31,
                 offset = { (pager.currentPage - page + pager.currentPageOffsetFraction).coerceIn(-1f, 1f) },
@@ -239,6 +251,19 @@ fun LiquidCardCarousel(
                 onAction = { onAction(item) },
             )
         }
+        if (immersive && motionEnabled && !lowRam && items.size > 1) {
+            LiquidMorphBridge(
+                from = { items.getOrNull(pager.currentPage)?.accent ?: Color.Transparent },
+                to = {
+                    val n = pager.currentPage +
+                        if (pager.currentPageOffsetFraction >= 0f) 1 else -1
+                    items.getOrNull(n)?.accent ?: Color.Transparent
+                },
+                progress = { pager.currentPageOffsetFraction },
+                modifier = Modifier.matchParentSize(),
+            )
+        }
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -248,6 +273,7 @@ fun LiquidCardCarousel(
                 onClick = { move(-1) },
                 enabled = settledPage > 0 && !navigating && !pager.isScrollInProgress,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), CircleShape)
                     .semantics { contentDescription = "이전 카드" },
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -267,6 +293,7 @@ fun LiquidCardCarousel(
                 onClick = { move(1) },
                 enabled = settledPage < items.lastIndex && !navigating && !pager.isScrollInProgress,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), CircleShape)
                     .semantics { contentDescription = "다음 카드" },
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
@@ -279,6 +306,8 @@ fun LiquidCardCarousel(
 private fun LiquidCarouselCard(
     item: LiquidCardItem,
     dark: Boolean,
+    immersive: Boolean,
+    playing: Boolean,
     motionEnabled: Boolean,
     allowBlur: Boolean,
     offset: () -> Float,
@@ -286,6 +315,20 @@ private fun LiquidCarouselCard(
     modifier: Modifier,
     onAction: () -> Unit,
 ) {
+    if (immersive) {
+        ImmersiveLiquidCard(
+            item = item,
+            modifier = modifier,
+            playing = playing,
+            motionEnabled = motionEnabled,
+            allowBlur = allowBlur,
+            offset = offset,
+            isMoving = isMoving,
+            onAction = onAction,
+        )
+        return
+    }
+
     val atmosphere by produceState(item.accent, item.artwork, item.accent) {
         // Tiny fixed-cost sampling runs off the UI thread; no decoder, Palette dependency,
         // persistent bitmap cache, or ownership of the supplied bitmap is introduced here.
@@ -294,21 +337,31 @@ private fun LiquidCarouselCard(
     val artwork = remember(item.artwork) {
         item.artwork?.takeUnless { it.isRecycled }?.asImageBitmap()
     }
+    val breathe = rememberInfiniteTransition(label = "album liquid breathing")
+    val breathingPhase by breathe.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(6800, easing = LinearEasing), RepeatMode.Restart),
+        label = "cover float",
+    )
+    val pulse = if (immersive && playing && motionEnabled && !isMoving()) {
+        sin(breathingPhase) * .026f
+    } else 0f
     val density = LocalDensity.current
-    val blurEffects = remember(allowBlur, density.density) {
+    val blurEffects = remember(allowBlur, immersive, density.density) {
         if (allowBlur) {
             List(5) { level ->
                 if (level == 0) null else BlurEffect(
-                    radiusX = with(density) { (level * 0.8f).dp.toPx() },
-                    radiusY = with(density) { 0.4.dp.toPx() },
+                    radiusX = with(density) { (level * if (immersive) 2.8f else 0.8f).dp.toPx() },
+                    radiusY = with(density) { (level * if (immersive) 1.3f else 0.4f).dp.toPx() },
                     edgeTreatment = TileMode.Clamp,
                 )
             }
         } else emptyList()
     }
-    val shell = if (dark) Color(0xFF171B27) else Color(0xFFF4F6FC)
-    val ink = if (dark) Color(0xFFF4F6FF) else Color(0xFF161B2C)
-    val secondaryInk = if (dark) Color(0xFFCED3E1) else Color(0xFF48516A)
+    val shell = if (dark) Color(0xFF191B25) else Color(0xFFFFFFFF)
+    val ink = if (dark) Color(0xFFF5F5F7) else Color(0xFF1C1C1E)
+    val secondaryInk = if (dark) Color(0xFFC7C7CC) else Color(0xFF636366)
     val cardShape = RoundedCornerShape(32.dp)
 
     Column(
@@ -316,8 +369,21 @@ private fun LiquidCarouselCard(
             .graphicsLayer {
                 val distance = if (motionEnabled) abs(offset()) else 0f
                 val stretch = sin(distance * Math.PI).toFloat()
-                scaleX = 1f - distance * 0.035f + stretch * 0.012f
-                scaleY = 1f - distance * 0.025f - stretch * 0.008f
+                if (immersive && motionEnabled) {
+                    // Spring-powered pull-in: the departing card tilts into a
+                    // vanishing point and expands back out as it snaps home.
+                    scaleX = 1f - distance * .18f + stretch * .055f
+                    scaleY = 1f - distance * .16f - stretch * .032f
+                    rotationZ = -offset() * 6f
+                    rotationY = offset() * 11f
+                    translationY = distance * 22.dp.toPx()
+                    // Hundreds of pixels avoids an inverted plane at the edges.
+                    cameraDistance = 640.dp.toPx()
+                    alpha = 1f - distance * .23f
+                } else {
+                    scaleX = 1f - distance * .035f + stretch * .012f
+                    scaleY = 1f - distance * .025f - stretch * .008f
+                }
             }
             .clip(cardShape)
             .background(shell)
@@ -363,13 +429,17 @@ private fun LiquidCarouselCard(
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         val position = if (motionEnabled) offset() else 0f
                         // Overscan keeps edges covered during the small parallax and blur.
-                        scaleX = 1.08f
-                        scaleY = 1.08f
-                        translationX = -position * size.width * 0.025f
+                        scaleX = 1.08f + pulse
+                        scaleY = 1.08f + pulse
+                        rotationZ = if (immersive && motionEnabled) pulse * 22f else 0f
+                        translationX = -position * size.width * (if (immersive) .06f else .025f)
                         renderEffect = if (allowBlur && isMoving()) {
                             blurEffects[(abs(position) * 4f).roundToInt().coerceIn(0, 4)]
                         } else null
-                    },
+                    }.then(
+                        if (immersive && motionEnabled) Modifier.liquidLensWarp(offset, enabled = true)
+                        else Modifier,
+                    ),
                 )
             } else {
                 Icon(
@@ -409,16 +479,20 @@ private fun LiquidCarouselCard(
                 modifier = Modifier.fillMaxWidth().sizeIn(minHeight = 48.dp)
                     .semantics { contentDescription = "${item.title}, ${item.actionLabel}" },
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(50.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = if (dark) Color.White else Color(0xFF1C1C1E),
+                    contentColor = if (dark) Color(0xFF191B25) else Color.White,
+                ),
             ) {
-                Text(item.actionLabel, textAlign = TextAlign.Center)
+                Text(item.actionLabel, textAlign = TextAlign.Center, fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
 
 @Composable
-private fun rememberLiquidMotionEnabled(): Boolean {
+internal fun rememberLiquidMotionEnabled(): Boolean {
     val resolver = LocalContext.current.contentResolver
     var enabled by remember(resolver) { mutableStateOf(ValueAnimator.areAnimatorsEnabled()) }
     DisposableEffect(resolver) {
