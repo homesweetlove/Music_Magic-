@@ -41,6 +41,7 @@ data class AudioEdits(
     val track: String = "",
     val lyrics: String = "",
     val artwork: ByteArray? = null,
+    val removeArtwork: Boolean = false,
 )
 
 data class SaveResult(
@@ -180,6 +181,7 @@ object AudioMetadata {
                         if (value.isEmpty()) tag.deleteField(key) else tag.setField(key, value)
                     }
                 }
+                if (edits.removeArtwork) tag.deleteArtworkField()
                 if (edits.artwork != null) {
                     require(edits.artwork.size <= 12 * 1024 * 1024) { "앨범아트는 12MB 이하만 가능합니다." }
                     val artwork = androidArtwork(edits.artwork)
@@ -196,6 +198,7 @@ object AudioMetadata {
                 val written = AudioFileIO.read(work).tag
                     ?: error("저장 검증 중 태그를 다시 읽을 수 없습니다.")
                 verifyFields(written, edits)
+                if (edits.removeArtwork) check(written.firstArtwork == null) { "표지 삭제 검증 실패" }
             }
 
             var outputUri = uri
@@ -213,6 +216,7 @@ object AudioMetadata {
                     val realTag = AudioFileIO.read(verify).tag
                         ?: error("저장한 파일의 메타데이터를 읽을 수 없습니다.")
                     verifyFields(realTag, edits)
+                    if (edits.removeArtwork) check(realTag.firstArtwork == null) { "원본 표지 삭제 검증 실패" }
                 }
 
                 if (edits.fileName != originalName) {
@@ -319,6 +323,7 @@ object AudioMetadata {
         requested.forEach { (key, value) ->
             check(actual.fields[key].orEmpty() == value) { "WAV $key 저장 검증 실패" }
         }
+        if (edits.removeArtwork) check(actual.picture == null) { "WAV 표지 삭제 검증 실패" }
         if (edits.artwork != null) check(actual.picture?.contentEquals(edits.artwork) == true) {
             "WAV 앨범커버 저장 검증 실패"
         }
@@ -331,7 +336,7 @@ object AudioMetadata {
         require(opts.outWidth > 0 && opts.outHeight > 0) { "이미지 데이터가 올바르지 않습니다." }
         return org.jaudiotagger.tag.images.AndroidArtwork().apply {
             binaryData = bytes
-            mimeType = "image/jpeg"
+            mimeType = ArtworkEditing.mime(bytes)
             description = ""
             pictureType = 3
             width = opts.outWidth
