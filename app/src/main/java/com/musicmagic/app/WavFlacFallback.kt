@@ -27,7 +27,18 @@ import java.nio.ByteOrder
  * and its metadata re-read before the destination becomes visible.
  */
 object WavFlacFallback {
-    private data class Pcm(val sampleRate: Int, val channels: Int, val offset: Long, val length: Long)
+    private data class Pcm(
+        val sampleRate: Int, val channels: Int, val offset: Long, val length: Long,
+        val bits: Int,
+    ) {
+        val frameBytes: Int get() = channels * (bits / 8)
+        val encoding: Int get() = when (bits) {
+            16 -> AudioFormat.ENCODING_PCM_16BIT
+            24 -> AudioFormat.ENCODING_PCM_24BIT_PACKED
+            32 -> AudioFormat.ENCODING_PCM_32BIT
+            else -> error("지원하지 않는 비트 깊이")
+        }
+    }
 
     fun convert(context: Context, source: Uri, edits: AudioEdits): Result<SaveResult> = runCatching {
         org.jaudiotagger.tag.TagOptionSingleton.getInstance().setAndroid(true)
@@ -52,6 +63,9 @@ object WavFlacFallback {
 
             val pcm = inspectPcm16(wav)
             encodeFlac(wav, pcm, flac)
+            check(readFlacBitDepth(flac) == pcm.bits) {
+                "FLAC 인코더가 원본 ${pcm.bits}-bit 깊이를 보존하지 않았습니다."
+            }
             val tagged = AudioFileIO.read(flac)
             val tag = tagged.getTagOrCreateAndSetDefault()
             for ((key, value) in listOf(
@@ -68,6 +82,9 @@ object WavFlacFallback {
             val checkTag = AudioFileIO.read(flac).tag ?: error("FLAC 태그를 확인할 수 없습니다.")
             check((edits.artwork == null) || (checkTag.firstArtwork?.binaryData?.isNotEmpty() == true)) {
                 "FLAC에 앨범 커버가 저장되지 않았습니다."
+            }
+            check(readFlacBitDepth(flac) == pcm.bits) {
+                "FLAC 메타데이터 저장 후 비트 깊이가 달라졌습니다."
             }
 
             val name = edits.fileName.substringBeforeLast('.', edits.fileName).ifBlank { "Music" } + ".flac"
@@ -149,18 +166,33 @@ object WavFlacFallback {
             }
             raf.seek(begin + size + (size and 1L))
         }
-        require(format == 1 && bits == 16 && channels in 1..2 &&
+        require(format == 1 && bits in setOf(16, 24, 32) && channels in 1..2 &&
             sampleRate in 8000..192000 && dataOffset >= 0 && dataLength > 0 &&
-            dataLength % (channels * 2) == 0L) {
-            "현재 자동 FLAC 변환은 16-bit PCM 모노/스테레오 WAV만 지원합니다. 음질 손실을 막기 위해 원본을 유지했어요."
+            dataLength % (channels * (bits / 8)) == 0L) {
+            "16/24/32-bit 정수형 PCM WAV만 무손실 변환합니다. 부동소수점이나 압축 WAV는 원본을 유지했어요."
         }
-        Pcm(sampleRate, channels, dataOffset, dataLength)
+        Pcm(sampleRate, channels, dataOffset, dataLength, bits)
+    }
+
+    /** FLAC STREAMINFO bits-per-sample field (without decoding audio). */
+    internal fun readFlacBitDepth(file: File): Int = RandomAccessFile(file, "r").use { raf ->
+        val magic = ByteArray(4)
+        raf.readFully(magic)
+        require(String(magic, Charsets.US_ASCII) == "fLaC") { "FLAC 서명이 없습니다." }
+        val blockHeader = raf.readUnsignedByte()
+        val blockSize = (raf.readUnsignedByte() shl 16) or
+            (raf.readUnsignedByte() shl 8) or raf.readUnsignedByte()
+        require(blockHeader and 127 == 0 && blockSize == 34) { "FLAC STREAMINFO가 없습니다." }
+        val info = ByteArray(34)
+        raf.readFully(info)
+        (((info[12].toInt() and 1) shl 4) or
+            ((info[13].toInt() ushr 4) and 15)) + 1
     }
 
     private fun encodeFlac(wav: File, pcm: Pcm, target: File) {
         val format = MediaFormat.createAudioFormat(
             MediaFormat.MIMETYPE_AUDIO_FLAC, pcm.sampleRate, pcm.channels)
-        format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
+        format.setInteger(MediaFormat.KEY_PCM_ENCODING, pcm.encoding)
         format.setInteger(MediaFormat.KEY_FLAC_COMPRESSION_LEVEL, 5)
         val encoder = runCatching { MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_FLAC) }
             .getOrElse { throw IllegalStateException("기기에 FLAC 무손실 인코더가 없습니다.", it) }
@@ -192,7 +224,7 @@ object WavFlacFallback {
                             if (idx >= 0) {
                                 val buf = encoder.getInputBuffer(idx) ?: error("FLAC 입력 버퍼 없음")
                                 buf.clear()
-                                val frameSize = pcm.channels * 2
+                                val frameSize = pcm.frameBytes
                                 val amount = minOf(remaining, (buf.remaining() / frameSize * frameSize).toLong()).toInt()
                                 if (amount == 0) {
                                     encoder.queueInputBuffer(idx, 0, 0,
