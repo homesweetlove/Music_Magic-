@@ -61,7 +61,7 @@ fun AlbumArtworkDialog(
     }
     var zoom by remember(uri) { mutableFloatStateOf(1f) }
     var turns by remember(uri) { mutableIntStateOf(0) }
-    var png by remember(uri) { mutableStateOf(false) }
+    var png by remember(uri) { mutableStateOf(uri.path?.endsWith(".png", ignoreCase = true) == true) }
     var busy by remember(uri) { mutableStateOf(false) }
     var error by remember(uri) { mutableStateOf("") }
     Dialog(onDismissRequest = { if (!busy) onDismiss() }) {
