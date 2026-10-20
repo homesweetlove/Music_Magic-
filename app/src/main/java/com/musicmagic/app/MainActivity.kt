@@ -23,6 +23,8 @@ import com.musicmagic.app.ui.GlassIconButton
 import com.musicmagic.app.ui.MagicButton
 import com.musicmagic.app.ui.MagicTypography
 import com.musicmagic.app.ui.AlbumArtworkDialog
+import com.musicmagic.app.ui.BatchTrackPicker
+import com.musicmagic.app.ui.EditHistoryPanel
 import com.musicmagic.app.player.MusicPlayerScreen
 import com.musicmagic.app.player.MiniPlayerBar
 import com.musicmagic.app.player.PlaybackService
@@ -69,6 +71,8 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.NavigationDrawerItemDefaults
@@ -145,6 +149,11 @@ private fun MusicMagicApp() {
     var batchStatus by remember { mutableStateOf("") }
     var batchArtist by remember { mutableStateOf("") }
     var batchAlbum by remember { mutableStateOf("") }
+    var batchArtworkBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var batchEditingUri by remember { mutableStateOf<Uri?>(null) }
+    var batchSelectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var historyRevision by remember { mutableIntStateOf(0) }
+    var askClearHistory by remember { mutableStateOf(false) }
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     val lifecycle = (context as ComponentActivity).lifecycle
     DisposableEffect(lifecycle) {
@@ -184,6 +193,7 @@ private fun MusicMagicApp() {
                 onSuccess = { tracks ->
                     libraryTracks = tracks
                     folderFiles = tracks.map { it.uri }
+                    batchSelectedIds = tracks.mapTo(mutableSetOf()) { it.uri.toString() }
                     batchStatus = "${tracks.size}곡 복원 완료"
                 },
                 onFailure = {
@@ -319,6 +329,7 @@ private fun MusicMagicApp() {
                 result.fold(onSuccess = { tracks ->
                     libraryTracks = tracks
                     folderFiles = tracks.map { it.uri }
+                    batchSelectedIds = tracks.mapTo(mutableSetOf()) { it.uri.toString() }
                     MusicCollections.rememberTree(context, uri)
                     batchStatus = "${tracks.size}개 음악 파일을 찾았어요. (최대 500곡)"
                 }, onFailure = { batchStatus = "폴더를 읽을 수 없습니다: ${it.message}" })
@@ -329,6 +340,9 @@ private fun MusicMagicApp() {
 
     val artPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         artworkEditingUri = uri
+    }
+    val batchArtPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        batchEditingUri = uri
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -397,6 +411,34 @@ private fun MusicMagicApp() {
                     artworkEditingUri = null
                     status = "앨범 표지 삭제 선택됨 · 저장을 누르면 반영됩니다."
                 },
+            )
+        }
+        batchEditingUri?.let { imageUri ->
+            AlbumArtworkDialog(
+                uri = imageUri,
+                onDismiss = { batchEditingUri = null },
+                onSave = { bytes ->
+                    batchArtworkBytes = bytes
+                    batchEditingUri = null
+                    batchStatus = "여러 곡에 적용할 표지가 준비됐어요."
+                },
+                onRemove = {
+                    batchArtworkBytes = null
+                    batchEditingUri = null
+                },
+            )
+        }
+        if (askClearHistory) {
+            AlertDialog(
+                onDismissRequest = { askClearHistory = false },
+                title = { Text("변경 기록 삭제") },
+                text = { Text("이전 버전 백업까지 기기에서 삭제됩니다. 삭제 후 복구할 수 없습니다.") },
+                confirmButton = { TextButton(onClick = {
+                    EditHistory.clear(context)
+                    historyRevision++
+                    askClearHistory = false
+                }) { Text("삭제") } },
+                dismissButton = { TextButton(onClick = { askClearHistory = false }) { Text("취소") } },
             )
         }
         val info = originalInfo
@@ -573,29 +615,40 @@ private fun MusicMagicApp() {
 
                 SectionCard(title = "폴더 · 일괄 편집", icon = Icons.Rounded.FolderOpen) {
                     MagicButton(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
-                    Text("${folderFiles.size}곡 선택됨")
+                    Text("${folderFiles.size}곡 검색됨")
+                    BatchTrackPicker(
+                        tracks = libraryTracks,
+                        selected = batchSelectedIds,
+                        onChange = { batchSelectedIds = it },
+                        enabled = !busy,
+                    )
                     EditorField("일괄 아티스트 (빈칸은 유지)", batchArtist, { batchArtist = it })
                     EditorField("일괄 앨범 (빈칸은 유지)", batchAlbum, { batchAlbum = it })
+                    MagicButton(onClick = { batchArtPicker.launch("image/*") }, enabled = !busy) {
+                        Text(if (batchArtworkBytes == null) "공통 앨범 표지 선택" else "표지 준비 완료 · 다시 선택")
+                    }
                     MagicButton(onClick = {
+                        val targets = folderFiles.filter { it.toString() in batchSelectedIds }
                         player?.release(); player = null
-                        PlaybackService.stopForEditing(folderFiles)
+                        PlaybackService.stopForEditing(targets)
                         busy = true
                         scope.launch {
                             val (message, savedFiles) = withContext(Dispatchers.IO) {
                                 var ok = 0
                                 val errors = mutableListOf<String>()
                                 val savedFiles = mutableListOf<Pair<Uri, SaveResult>>()
-                                for (uri in folderFiles) {
+                                for (uri in targets) {
                                     val info = AudioMetadata.read(context, uri)
                                     if (!info.supported) { errors.add(info.fileName); continue }
                                     val edits = AudioEdits(info.fileName, info.title,
                                         batchArtist.ifBlank { info.artist }, batchAlbum.ifBlank { info.album },
-                                        info.albumArtist, info.genre, info.year, info.track, info.lyrics)
+                                        info.albumArtist, info.genre, info.year, info.track, info.lyrics,
+                                        artwork = batchArtworkBytes)
                                     AudioMetadata.save(context, uri, edits).fold(onSuccess = {
                                         ok++; savedFiles.add(uri to it)
                                     }, onFailure = { errors.add(info.fileName) })
                                 }
-                                ("$ok/${folderFiles.size}곡 저장 성공" + if (errors.isNotEmpty()) " · 실패: " + errors.take(5).joinToString() else "") to savedFiles
+                                ("$ok/${targets.size}곡 저장 성공" + if (errors.isNotEmpty()) " · 실패: " + errors.take(5).joinToString() else "") to savedFiles
                             }
                             batchStatus = message
                             savedFiles.forEach { (old, saved) ->
@@ -608,10 +661,12 @@ private fun MusicMagicApp() {
                                 }
                             }
                             libraryRevision++
+                            historyRevision++
                             comparison = null
                             busy = false
                         }
-                    }, enabled = !busy && folderFiles.isNotEmpty() && (batchArtist.isNotBlank() || batchAlbum.isNotBlank())) { Text("선택 폴더 일괄 저장") }
+                    }, enabled = !busy && batchSelectedIds.isNotEmpty() &&
+                        (batchArtist.isNotBlank() || batchAlbum.isNotBlank() || batchArtworkBytes != null)) { Text("선택 폴더 일괄 저장") }
                     MagicButton(onClick = {
                         busy = true
                         scope.launch {
@@ -864,6 +919,7 @@ private fun MusicMagicApp() {
                                         applyInfo(saved.info)
                                         comparison = null
                                         libraryRevision++
+                                        historyRevision++
                                         updateLibrary(uri, saved)
                                         success = true
                                         status = if (saved.convertedFromWav)
