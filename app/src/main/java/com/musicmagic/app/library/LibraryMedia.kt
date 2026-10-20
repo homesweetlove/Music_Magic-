@@ -80,6 +80,10 @@ object LibraryMedia {
     private val covers = object : LruCache<String, CoverArt>(8 * 1024 * 1024) {
         override fun sizeOf(key: String, value: CoverArt) = value.bitmap?.allocationByteCount ?: 64
     }
+    /** Call after successful metadata/artwork writes; cached bitmaps are not recycled. */
+    fun invalidateArtwork() {
+        covers.evictAll()
+    }
 
     suspend fun scan(context: Context, tree: Uri, onProgress: (Int) -> Unit): List<LibraryTrack> {
         val queue = ArrayDeque<DocumentFile>()
