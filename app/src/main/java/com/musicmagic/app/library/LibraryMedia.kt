@@ -152,14 +152,37 @@ object LibraryMedia {
     }
 
     fun accent(bitmap: Bitmap?): Color {
-        if (bitmap == null) return Color(0xFF0A84FF)
-        var r = 0L; var g = 0L; var b = 0L; var count = 0
-        // A bounded 8x8 sample; no full-size pixel array or per-frame work.
+        if (bitmap == null) return Color(0xFF6389C8)
+        // Sample only 64 pixels, cluster saturated colors by hue, and avoid averaging
+        // colorful covers into a muddy gray. No heavy Palette dependency or per-frame work.
+        val counts = IntArray(12)
+        val reds = LongArray(12)
+        val greens = LongArray(12)
+        val blues = LongArray(12)
+        val hsv = FloatArray(3)
+        var allR = 0L; var allG = 0L; var allB = 0L; var allCount = 0
         for (y in 0 until 8) for (x in 0 until 8) {
             val pixel = bitmap.getPixel(x * bitmap.width / 8, y * bitmap.height / 8)
             if (android.graphics.Color.alpha(pixel) < 128) continue
-            r += android.graphics.Color.red(pixel); g += android.graphics.Color.green(pixel); b += android.graphics.Color.blue(pixel); count++
+            val r = android.graphics.Color.red(pixel)
+            val g = android.graphics.Color.green(pixel)
+            val b = android.graphics.Color.blue(pixel)
+            allR += r; allG += g; allB += b; allCount++
+            android.graphics.Color.colorToHSV(pixel, hsv)
+            if (hsv[1] < 0.22f || hsv[2] < 0.13f) continue
+            val bucket = (hsv[0] / 30f).toInt().coerceIn(0, 11)
+            counts[bucket]++
+            reds[bucket] += r; greens[bucket] += g; blues[bucket] += b
         }
-        return if (count == 0) Color(0xFF0A84FF) else Color((r / count).toInt(), (g / count).toInt(), (b / count).toInt())
+        if (allCount == 0) return Color(0xFF6389C8)
+        val dominant = counts.indices.maxByOrNull { counts[it] } ?: 0
+        if (counts[dominant] < 3) return Color(
+            (allR / allCount).toInt(), (allG / allCount).toInt(), (allB / allCount).toInt(),
+        )
+        return Color(
+            (reds[dominant] / counts[dominant]).toInt(),
+            (greens[dominant] / counts[dominant]).toInt(),
+            (blues[dominant] / counts[dominant]).toInt(),
+        )
     }
 }
