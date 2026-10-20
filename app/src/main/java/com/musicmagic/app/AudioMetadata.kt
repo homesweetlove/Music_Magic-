@@ -256,7 +256,7 @@ object AudioMetadata {
                 .putString("undo_name", originalName)
                 .apply()
             context.contentResolver.notifyChange(outputUri, null)
-            SaveResult(
+            val result = SaveResult(
                 info = AudioInfo(
                     fileName = edits.fileName,
                     title = edits.title,
@@ -273,6 +273,10 @@ object AudioMetadata {
                 ),
                 uri = outputUri,
             )
+            // Journal failures must never make a successfully saved file look
+            // like a failed save; journal has its own retention limit.
+            runCatching { EditHistory.record(context, outputUri, originalName, backup, result.info) }
+            result
         } finally {
             backup.delete()
             work.delete()
