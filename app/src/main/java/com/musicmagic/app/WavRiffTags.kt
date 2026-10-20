@@ -17,7 +17,10 @@ import java.nio.ByteOrder
  * understands this format directly.
  */
 object WavRiffTags {
-    data class Tags(val fields: Map<String, String>, val picture: ByteArray?)
+    data class Tags(
+        val fields: Map<String, String>, val picture: ByteArray?,
+        val extraFrames: List<Pair<String, ByteArray>> = emptyList(),
+    )
     private val mapped = linkedMapOf(
         "TIT2" to "title", "TPE1" to "artist", "TALB" to "album",
         "TPE2" to "albumArtist", "TCON" to "genre", "TYER" to "year",
@@ -114,7 +117,7 @@ object WavRiffTags {
         }
         val artwork = edits.artwork ?: current.picture
         if (artwork != null) require(artwork.size <= MAX_ART) { "표지는 12MB 이하만 저장할 수 있습니다." }
-        val id3 = encodeId3(merged, artwork)
+        val id3 = encodeId3(merged, artwork, current.extraFrames)
         val dest = File.createTempFile("musicmagic-riff-", ".wav", file.parentFile)
         try {
             RandomAccessFile(file, "r").use { source ->
@@ -170,6 +173,7 @@ object WavRiffTags {
         if (major != 3 && major != 4) return Tags(emptyMap(), null)
         val total = syncsafe(data, 6).coerceAtMost(data.size - 10)
         val fields = mutableMapOf<String, String>()
+        val extraFrames = mutableListOf<Pair<String, ByteArray>>()
         var picture: ByteArray? = null
         var at = 10
         val end = 10 + total
@@ -204,13 +208,20 @@ object WavRiffTags {
                     else -> String(textPayload, Charsets.ISO_8859_1)
                 }.trim('\u0000')
                 mapped[frame]?.let { fields[it] = decoded }
+            } else if (data[at + 8] == 0.toByte() && data[at + 9] == 0.toByte()) {
+                // Keep unmodified private/vendor tags when rewriting album art.
+                // Unknown compression/encryption flags are never silently stripped.
+                extraFrames.add(frame to data.copyOfRange(offset, offset + length))
             }
             at = offset + length
         }
-        return Tags(fields, picture)
+        return Tags(fields, picture, extraFrames)
     }
 
-    private fun encodeId3(fields: Map<String, String>, picture: ByteArray?): ByteArray {
+    private fun encodeId3(
+        fields: Map<String, String>, picture: ByteArray?,
+        extraFrames: List<Pair<String, ByteArray>>,
+    ): ByteArray {
         val frames = ByteArrayOutputStream()
         mapped.forEach { (frameId, key) ->
             val text = fields[key]?.takeIf(String::isNotBlank) ?: return@forEach
@@ -224,6 +235,9 @@ object WavRiffTags {
             val bytes = byteArrayOf(0) + "image/jpeg".toByteArray(Charsets.ISO_8859_1) +
                 byteArrayOf(0, 3, 0) + picture
             writeFrame(frames, "APIC", bytes)
+        }
+        extraFrames.forEach { (id, body) ->
+            if (body.size < MAX_TAG) writeFrame(frames, id, body)
         }
         if (frames.size() == 0) return ByteArray(0)
         check(frames.size() <= MAX_TAG - 10) { "WAV 메타데이터가 너무 큽니다." }
