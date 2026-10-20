@@ -51,6 +51,42 @@ Android 10+ · API 29+ · Debug-signed preview · Google Play 배포 없음 / No
 > **미리보기 빌드 / Preview build** — 개발용 서명(debug) APK이며 Google Play 배포판이 아닙니다. / This APK uses a debug signing key and is distributed as a preview outside Google Play.
 
 <a id="features"></a>
+## New: WAV covers, cover-only save, and liquid poster playback
+
+### Editing
+- **Independent changes:** a song can be saved when only the album cover, title,
+  artist, album, lyrics, or any other editable tag changes. Blank title or artist
+  is valid; a new cover does not require filling either field.
+- **RIFF WAV artwork:** for ordinary RIFF WAV files, Music Magic writes a
+  standard ID3v2.3/APIC front-cover chunk. Audio samples are never decoded or
+  re-encoded during this operation, and the written metadata is re-read before
+  the app overwrites the original. The WAV library artwork reader recognizes
+  these cover chunks even if Android's built-in metadata retriever does not.
+- **Automatic FLAC fallback:** if a WAV artwork update cannot be verified or
+  the WAV document cannot be modified, the app attempts a NEW FLAC file using
+  the device's native lossless FLAC encoder. Only 16-bit mono/stereo PCM WAV is
+  eligible for this fallback; any other depth or unsupported container yields
+  a clear error rather than silent downsampling. The original WAV is retained.
+  The new file is written into the selected writable music tree when available,
+  or into the device's `Music/Music Magic` collection.
+- **Rollback:** direct in-place saves retain the existing backup and revert
+  the original if verification fails. In fallback mode, a partial destination
+  file is deleted on failure.
+
+Third-party WAV player artwork support varies, even for standards-compliant
+RIFF/ID3 chunks. Converting to FLAC is only attempted when WAV embedding or
+write/readback verification actually fails; direct WAV saves preserve PCM.
+
+### Player
+The Now Playing carousel now uses dedicated large, saturated, cover-reactive
+**liquid poster cards** rather than the editor's plain cards. It has a floating
+cover, drag-bound Bézier liquid membrane, AGSL lens distortion where supported,
+parallax, motion blur and a moving vortex backdrop. These are interactive
+Android Compose graphics inspired by the reference animation, not copied
+HTML/CSS or the original artist's video.
+
+See `docs/DESIGN.md` for effects, reduced motion and performance limits.
+
 ## Immersive liquid motion — development branch
 
 **Now Playing includes a real animated portal**, beyond a plain background
