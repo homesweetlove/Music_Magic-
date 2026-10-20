@@ -1,12 +1,11 @@
 package com.musicmagic.app.player
 
 import android.content.ComponentName
-import android.graphics.Bitmap
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -123,7 +122,12 @@ fun MusicPlayerScreen(
                 if (attached) {
                     controller = connected
                     connected.addListener(listener)
-                    listener.onEvents(connected, Player.Events.EMPTY)
+                    playing = connected.isPlaying
+                    currentId = connected.currentMediaItem?.mediaId
+                    duration = connected.duration.takeIf { it > 0L } ?: 0L
+                    position = connected.currentPosition.coerceAtLeast(0L)
+                    shuffle = connected.shuffleModeEnabled
+                    repeatMode = connected.repeatMode
                 }
             }.onFailure {
                 if (attached) error = "오디오 서비스를 연결할 수 없습니다: ${it.message.orEmpty()}"
@@ -287,6 +291,7 @@ fun MusicPlayerScreen(
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF111322)),
                         modifier = Modifier.size(76.dp),
+                        contentPadding = PaddingValues(0.dp),
                     ) {
                         Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             if (playing) "일시정지" else "재생", modifier = Modifier.size(34.dp))
