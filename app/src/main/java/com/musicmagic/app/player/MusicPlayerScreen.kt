@@ -316,6 +316,7 @@ fun MusicPlayerScreen(
                 },
                 onAction = { card -> play(tracks.indexOfFirst { it.uri.toString() == card.id }) },
                 immersive = true,
+                playing = playing,
             )
             }
 
