@@ -17,10 +17,16 @@ import com.musicmagic.app.ui.AudioComparison
 import com.musicmagic.app.ui.AudioComparisonCarousel
 import com.musicmagic.app.ui.MusicLibraryCarousel
 import com.musicmagic.app.ui.SelectedMusicCarousel
+import com.musicmagic.app.player.MusicPlayerScreen
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -45,12 +51,20 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -106,6 +120,8 @@ private fun MusicMagicApp() {
     var folderFiles by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var libraryTracks by remember { mutableStateOf<List<LibraryTrack>>(emptyList()) }
     var libraryRevision by remember { mutableIntStateOf(0) }
+    var currentScreen by remember { mutableStateOf("editor") }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     var comparison by remember { mutableStateOf<AudioComparison?>(null) }
     var exportSource by remember { mutableStateOf<Pair<Uri, AudioInfo>?>(null) }
     var batchStatus by remember { mutableStateOf("") }
@@ -161,6 +177,20 @@ private fun MusicMagicApp() {
         track = info.track
         lyrics = info.lyrics
         artworkBytes = null
+    }
+
+    fun openEditor(uri: Uri) {
+        if (busy) return
+        selectedUri = uri
+        comparison = null
+        busy = true
+        currentScreen = "editor"
+        scope.launch {
+            val loaded = withContext(Dispatchers.IO) { AudioMetadata.read(context, uri) }
+            applyInfo(loaded)
+            status = loaded.error.orEmpty()
+            busy = false
+        }
     }
 
     fun updateLibrary(oldUri: Uri, saved: SaveResult) {
@@ -300,8 +330,58 @@ private fun MusicMagicApp() {
         val extensionChanged = info != null && requestedExtension != originalExtension
         val editable = info?.supported == true && selectedUri != null
 
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(
+        val playbackTracks = if (libraryTracks.isNotEmpty()) libraryTracks else selectedUri?.let { uri ->
+            info?.let { meta ->
+                listOf(LibraryTrack(
+                    uri = uri, fileName = meta.fileName,
+                    title = meta.title.ifBlank { meta.fileName }, artist = meta.artist.ifBlank { "알 수 없는 아티스트" },
+                    album = meta.album.ifBlank { "앨범 정보 없음" }, albumArtist = meta.albumArtist,
+                    quality = meta.format,
+                ))
+            }
+        }.orEmpty()
+
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet {
+                    Spacer(Modifier.height(28.dp))
+                    Text("Music Magic", modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
+                        style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    NavigationDrawerItem(
+                        label = { Text("음악 정보 편집") },
+                        selected = currentScreen == "editor",
+                        icon = { Icon(Icons.Rounded.Edit, null) },
+                        onClick = { currentScreen = "editor"; scope.launch { drawerState.close() } },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                    NavigationDrawerItem(
+                        label = { Text("뮤직 플레이어") },
+                        selected = currentScreen == "player",
+                        icon = { Icon(Icons.Rounded.Headphones, null) },
+                        onClick = { currentScreen = "player"; scope.launch { drawerState.close() } },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+            },
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                AnimatedContent(
+                    targetState = currentScreen,
+                    transitionSpec = { fadeIn(tween(240)) togetherWith fadeOut(tween(160)) },
+                    label = "Music Magic screen",
+                ) { screen ->
+                    if (screen == "player") {
+                        MusicPlayerScreen(
+                            tracks = playbackTracks,
+                            revision = libraryRevision,
+                            onMenu = { scope.launch { drawerState.open() } },
+                            onPickFolder = { folderPicker.launch(null) },
+                            onPickFile = { picker.launch(arrayOf("audio/*", "application/ogg", "application/octet-stream")) },
+                            onEdit = ::openEditor,
+                        )
+                    } else {
+                        Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .safeDrawingPadding()
@@ -310,6 +390,13 @@ private fun MusicMagicApp() {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Spacer(Modifier.height(18.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Rounded.Menu, contentDescription = "메뉴 열기")
+                    }
+                    Text("LIBRARY & EDITOR", style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
 
                 Text(
                     text = "Music Magic",
@@ -324,19 +411,7 @@ private fun MusicMagicApp() {
                 )
 
                 if (libraryTracks.isNotEmpty()) {
-                    MusicLibraryCarousel(libraryTracks, busy, libraryRevision, onSelect = { uri ->
-                        if (!busy) {
-                            selectedUri = uri
-                            comparison = null
-                            busy = true
-                            scope.launch {
-                                val loaded = withContext(Dispatchers.IO) { AudioMetadata.read(context, uri) }
-                                applyInfo(loaded)
-                                status = loaded.error.orEmpty()
-                                busy = false
-                            }
-                        }
-                    })
+                    MusicLibraryCarousel(libraryTracks, busy, libraryRevision, onSelect = ::openEditor)
                 }
 
                 SectionCard(title = "폴더 · 일괄 편집", icon = Icons.Rounded.FolderOpen) {
@@ -650,6 +725,9 @@ private fun MusicMagicApp() {
 
                 SupportedFormatsCard()
                 Spacer(Modifier.height(24.dp))
+                        }
+                    }
+                }
             }
         }
     }
