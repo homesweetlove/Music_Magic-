@@ -7,12 +7,14 @@ import android.media.MediaPlayer
 import androidx.documentfile.provider.DocumentFile
 import java.security.MessageDigest
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.musicmagic.app.library.LibraryMedia
 import com.musicmagic.app.library.LibraryTrack
+import com.musicmagic.app.library.MusicCollections
 import com.musicmagic.app.ui.AudioComparison
 import com.musicmagic.app.ui.AudioComparisonCarousel
 import com.musicmagic.app.ui.MusicLibraryCarousel
@@ -21,6 +23,7 @@ import com.musicmagic.app.ui.GlassIconButton
 import com.musicmagic.app.ui.MagicButton
 import com.musicmagic.app.ui.MagicTypography
 import com.musicmagic.app.player.MusicPlayerScreen
+import com.musicmagic.app.player.MiniPlayerBar
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -151,6 +154,37 @@ private fun MusicMagicApp() {
     var status by remember { mutableStateOf("") }
     var success by remember { mutableStateOf(false) }
 
+    // Restore a stored SAF grant by rescanning. Never cache raw audio bytes in prefs.
+    LaunchedEffect(Unit) {
+        MusicCollections.lastTree(context)?.let { tree ->
+            val permitted = context.contentResolver.persistedUriPermissions.any {
+                it.isReadPermission && it.uri == tree
+            }
+            if (!permitted) {
+                MusicCollections.forgetTree(context)
+                batchStatus = "기존 음악 폴더 접근 권한이 만료됐어요. 다시 선택해주세요."
+                return@LaunchedEffect
+            }
+            busy = true
+            batchStatus = "이전에 선택한 음악 폴더를 복원하는 중…"
+            val result = runCatching { withContext(Dispatchers.IO) {
+                LibraryMedia.scan(context, tree) { }
+            } }
+            result.fold(
+                onSuccess = { tracks ->
+                    libraryTracks = tracks
+                    folderFiles = tracks.map { it.uri }
+                    batchStatus = "${tracks.size}곡 복원 완료"
+                },
+                onFailure = {
+                    MusicCollections.forgetTree(context)
+                    batchStatus = "폴더 복원 실패: ${it.message ?: "다시 폴더를 선택해주세요."}"
+                },
+            )
+            busy = false
+        }
+    }
+
     fun preview(uri: Uri) {
         player?.release()
         val candidate = MediaPlayer()
@@ -201,6 +235,7 @@ private fun MusicMagicApp() {
     }
 
     fun updateLibrary(oldUri: Uri, saved: SaveResult) {
+        MusicCollections.replaceUri(context, oldUri, saved.uri)
         libraryTracks = libraryTracks.map { entry ->
             if (LibraryMedia.sameDocument(entry.uri, oldUri)) LibraryMedia.updated(entry, saved.uri, saved.info) else entry
         }
@@ -272,6 +307,7 @@ private fun MusicMagicApp() {
                 result.fold(onSuccess = { tracks ->
                     libraryTracks = tracks
                     folderFiles = tracks.map { it.uri }
+                    MusicCollections.rememberTree(context, uri)
                     batchStatus = "${tracks.size}개 음악 파일을 찾았어요. (최대 500곡)"
                 }, onFailure = { batchStatus = "폴더를 읽을 수 없습니다: ${it.message}" })
                 busy = false
@@ -495,6 +531,11 @@ private fun MusicMagicApp() {
                         )
                     }
                 }
+
+                MiniPlayerBar(
+                    onExpand = { currentScreen = "player" },
+                    onEdit = { uri -> openEditor(uri) },
+                )
 
                 if (libraryTracks.isNotEmpty()) {
                     MusicLibraryCarousel(libraryTracks, busy, libraryRevision, onSelect = ::openEditor)
