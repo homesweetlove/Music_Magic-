@@ -9,6 +9,12 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -119,6 +125,7 @@ fun LiquidCardCarousel(
     onAction: (LiquidCardItem) -> Unit,
     onSettled: ((LiquidCardItem) -> Unit)? = null,
     immersive: Boolean = false,
+    playing: Boolean = false,
 ) {
     val ids = remember(items) {
         items.map { it.id }.also { keys ->
@@ -230,6 +237,7 @@ fun LiquidCardCarousel(
                 item = item,
                 dark = dark,
                 immersive = immersive,
+                playing = playing,
                 motionEnabled = motionEnabled,
                 allowBlur = motionEnabled && !lowRam && Build.VERSION.SDK_INT >= 31,
                 offset = { (pager.currentPage - page + pager.currentPageOffsetFraction).coerceIn(-1f, 1f) },
@@ -285,6 +293,7 @@ private fun LiquidCarouselCard(
     item: LiquidCardItem,
     dark: Boolean,
     immersive: Boolean,
+    playing: Boolean,
     motionEnabled: Boolean,
     allowBlur: Boolean,
     offset: () -> Float,
@@ -300,6 +309,16 @@ private fun LiquidCarouselCard(
     val artwork = remember(item.artwork) {
         item.artwork?.takeUnless { it.isRecycled }?.asImageBitmap()
     }
+    val breathe = rememberInfiniteTransition(label = "album liquid breathing")
+    val breathingPhase by breathe.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(6800, easing = LinearEasing), RepeatMode.Restart),
+        label = "cover float",
+    )
+    val pulse = if (immersive && playing && motionEnabled && !isMoving()) {
+        sin(breathingPhase) * .026f
+    } else 0f
     val density = LocalDensity.current
     val blurEffects = remember(allowBlur, immersive, density.density) {
         if (allowBlur) {
@@ -382,9 +401,10 @@ private fun LiquidCarouselCard(
                     modifier = Modifier.fillMaxSize().graphicsLayer {
                         val position = if (motionEnabled) offset() else 0f
                         // Overscan keeps edges covered during the small parallax and blur.
-                        scaleX = 1.08f
-                        scaleY = 1.08f
-                        translationX = -position * size.width * 0.025f
+                        scaleX = 1.08f + pulse
+                        scaleY = 1.08f + pulse
+                        rotationZ = if (immersive && motionEnabled) pulse * 22f else 0f
+                        translationX = -position * size.width * (if (immersive) .06f else .025f)
                         renderEffect = if (allowBlur && isMoving()) {
                             blurEffects[(abs(position) * 4f).roundToInt().coerceIn(0, 4)]
                         } else null
