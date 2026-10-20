@@ -236,6 +236,7 @@ private fun MusicMagicApp() {
     }
 
     fun updateLibrary(oldUri: Uri, saved: SaveResult) {
+        LibraryMedia.invalidateArtwork()
         MusicCollections.replaceUri(context, oldUri, saved.uri)
         libraryTracks = libraryTracks.map { entry ->
             if (LibraryMedia.sameDocument(entry.uri, oldUri)) LibraryMedia.updated(entry, saved.uri, saved.info) else entry
@@ -621,6 +622,7 @@ private fun MusicMagicApp() {
                         val result = withContext(Dispatchers.IO) { AudioMetadata.undoLastWithUri(context) }
                         result.fold(
                             onSuccess = { saved ->
+                                LibraryMedia.invalidateArtwork()
                                 oldUri?.let { updateLibrary(it, saved) }
                                 if (selectedUri?.let { oldUri != null && LibraryMedia.sameDocument(it, oldUri) } == true) {
                                     selectedUri = saved.uri
