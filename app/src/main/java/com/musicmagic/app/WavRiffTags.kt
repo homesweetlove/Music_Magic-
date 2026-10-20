@@ -1,5 +1,9 @@
 package com.musicmagic.app
 
+import android.content.Context
+import android.net.Uri
+import java.io.BufferedInputStream
+import java.io.DataInputStream
 import java.io.File
 import java.io.RandomAccessFile
 import java.io.ByteArrayOutputStream
@@ -50,6 +54,50 @@ object WavRiffTags {
             return result
         }
     }
+
+    /** Stream only chunk headers and the bounded ID3 chunk, not the whole WAV. */
+    fun embeddedArtwork(context: Context, uri: Uri): ByteArray? = runCatching {
+        context.contentResolver.openInputStream(uri)?.buffered()?.use { input ->
+            val data = DataInputStream(input)
+            val top = ByteArray(12)
+            data.readFully(top)
+            if (String(top, 0, 4, Charsets.US_ASCII) != "RIFF" ||
+                String(top, 8, 4, Charsets.US_ASCII) != "WAVE") return@use null
+            var consumed = 12L
+            val riffSize = (top[4].toLong() and 255L) or
+                ((top[5].toLong() and 255L) shl 8) or
+                ((top[6].toLong() and 255L) shl 16) or
+                ((top[7].toLong() and 255L) shl 24)
+            val total = riffSize + 8L
+            while (consumed + 8 <= total) {
+                val header = ByteArray(8)
+                data.readFully(header)
+                consumed += 8
+                val name = String(header, 0, 4, Charsets.US_ASCII)
+                val length = (header[4].toLong() and 255) or
+                    ((header[5].toLong() and 255) shl 8) or
+                    ((header[6].toLong() and 255) shl 16) or
+                    ((header[7].toLong() and 255) shl 24)
+                val padded = length + (length and 1L)
+                if (consumed + padded > total) return@use null
+                if (name.equals("id3 ", true) && length in 10..MAX_TAG.toLong()) {
+                    val bytes = ByteArray(length.toInt())
+                    data.readFully(bytes)
+                    return@use parseId3(bytes).picture
+                }
+                var skip = if (name.equals("id3 ", true)) padded else padded
+                while (skip > 0L) {
+                    val count = input.skip(skip)
+                    if (count <= 0L) {
+                        if (input.read() == -1) return@use null
+                        skip--
+                    } else skip -= count
+                }
+                consumed += padded
+            }
+            null
+        }
+    }.getOrNull()
 
     fun write(file: File, edits: AudioEdits) {
         require(isWave(file)) { "이 WAV는 표준 RIFF 컨테이너가 아닙니다. 원본을 변경하지 않았어요." }
@@ -143,12 +191,12 @@ object WavRiffTags {
                         var pos = idx
                         while (pos + 1 < payload.size && !(payload[pos] == 0.toByte() && payload[pos + 1] == 0.toByte())) pos += 2
                         (pos + 2).coerceAtMost(payload.size)
-                    } else (payload.indexOf(0, idx).takeIf { it >= 0 }?.plus(1) ?: idx)
+                    } else ((idx until payload.size).firstOrNull { payload[it] == 0.toByte() }?.plus(1) ?: idx)
                     if (endDesc < payload.size && payload.size - endDesc <= MAX_ART)
                         picture = payload.copyOfRange(endDesc, payload.size)
                 }
             } else if (frame in mapped || frame == "USLT") {
-                val textPayload = if (frame == "USLT" && payload.size > 4) payload.copyOfRange(4, payload.size) else payload
+                val textPayload = if (frame == "USLT" && payload.size > 5) payload.copyOfRange(5, payload.size) else payload
                 val decoded = when (encoding) {
                     1 -> String(textPayload, Charsets.UTF_16)
                     2 -> String(textPayload, Charsets.UTF_16BE)
