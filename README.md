@@ -61,6 +61,7 @@ Music Magic writes **metadata into the actual audio file**. Saving overwrites th
 | **파일 · Files** | SAF로 파일·폴더 선택, 확장자를 유지한 이름 변경 및 아티스트/제목 기반 정리 | Select files/folders through Android SAF; rename using artist/title while preserving the extension |
 | **정리 · Library** | 폴더 내 아티스트/앨범 일괄 편집, SHA-256 완전 동일 파일 탐지 | Batch-edit artist/album in a folder; find byte-identical files with SHA-256 |
 | **탐색 · Browse** | Liquid Music 앨범/모든 곡 캐러셀, 표지 기반 색상, 라이트·다크 모드 | Liquid Music album/all-track carousel, artwork-derived colors and light/dark themes |
+| **플레이어 · Player** | 햄버거 메뉴로 편집기↔음악 재생 전환, 표지 색상 반응형 배경, 큐·탐색·셔플·반복·백그라운드 재생 | Drawer navigation, artwork-reactive background, queue/seek/shuffle/repeat and background playback |
 | **저장 · Save** | 변경 미리보기, 원본 덮어쓰기 검증, 마지막 저장 백업 복원 | Preview changes, verify source overwrites and restore the last-save backup |
 | **내보내기 · Export** | PCM WAV / AAC M4A 변환, 성공한 결과와 원본의 Before/After 비교 재생 | Export PCM WAV / AAC M4A; compare the actual source with a successful export |
 | **곡 정보 · Lookup** | 선택적으로 MusicBrainz 검색 실행 — 인터넷 필요 | Optional, explicitly requested MusicBrainz lookup — internet required |
@@ -81,6 +82,8 @@ MP3 · FLAC · M4A/M4B/MP4 · OGG/OGA · Opus · WAV · AIF/AIFF · WMA · DSF
 | **1** | 파일이나 폴더를 선택하고 접근 권한을 허용합니다. | Choose a file or folder and grant access. |
 | **2** | 앨범 → **곡 보기** → **정보 편집**에서 태그·표지·가사를 수정합니다. | Browse an album → **곡 보기** (view tracks) → **정보 편집** (edit metadata). |
 | **3** | 변경 내용을 미리 보고 저장합니다. 변환은 별도의 WAV/M4A 내보내기를 사용합니다. | Preview changes and save. Use the separate WAV/M4A export action for conversion. |
+
+**왼쪽 상단 메뉴 → 뮤직 플레이어**를 누르면 선택한 폴더의 곡을 연속 재생할 수 있습니다. 앨범 카드를 넘기거나 **이 곡 재생**을 누르세요. Android 미디어 세션을 통해 백그라운드·잠금 화면에서도 제어할 수 있습니다. 플레이어는 로컬 파일만 재생하며 스트리밍 서비스와 연동하지 않습니다.
 
 **모든 곡**은 하위 폴더를 포함해 최대 500곡을 표시합니다. 스와이프는 탐색만 수행하며, 저장·재생은 버튼으로 실행합니다.<br />
 **모든 곡** (all tracks) shows up to 500 discovered tracks, including nested folders. Swipes browse cards; buttons perform writes and start playback.
