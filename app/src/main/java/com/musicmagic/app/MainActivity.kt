@@ -22,6 +22,7 @@ import com.musicmagic.app.ui.SelectedMusicCarousel
 import com.musicmagic.app.ui.GlassIconButton
 import com.musicmagic.app.ui.MagicButton
 import com.musicmagic.app.ui.MagicTypography
+import com.musicmagic.app.ui.AlbumArtworkDialog
 import com.musicmagic.app.player.MusicPlayerScreen
 import com.musicmagic.app.player.MiniPlayerBar
 import com.musicmagic.app.player.PlaybackService
@@ -157,6 +158,8 @@ private fun MusicMagicApp() {
         onDispose { lifecycle.removeObserver(observer); player?.release(); player = null }
     }
     var artworkBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var artworkRemoved by remember { mutableStateOf(false) }
+    var artworkEditingUri by remember { mutableStateOf<Uri?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("") }
     var success by remember { mutableStateOf(false) }
@@ -225,6 +228,7 @@ private fun MusicMagicApp() {
         track = info.track
         lyrics = info.lyrics
         artworkBytes = null
+        artworkRemoved = false
     }
 
     fun openEditor(uri: Uri) {
@@ -324,17 +328,7 @@ private fun MusicMagicApp() {
     }
 
     val artPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            busy = true
-            scope.launch {
-                val result = withContext(Dispatchers.IO) { LibraryMedia.prepareArtwork(context, uri) }
-                result.fold(onSuccess = {
-                    artworkBytes = it
-                    status = "앨범아트를 최대 1000px JPEG로 최적화했어요. 저장하면 음악 파일에 기록됩니다."
-                }, onFailure = { status = it.message ?: "이미지를 읽을 수 없습니다." })
-                busy = false
-            }
-        }
+        artworkEditingUri = uri
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -387,6 +381,24 @@ private fun MusicMagicApp() {
     }
 
     MaterialTheme(colorScheme = colors, typography = MagicTypography) {
+        artworkEditingUri?.let { imageUri ->
+            AlbumArtworkDialog(
+                uri = imageUri,
+                onDismiss = { artworkEditingUri = null },
+                onSave = { bytes ->
+                    artworkBytes = bytes
+                    artworkRemoved = false
+                    artworkEditingUri = null
+                    status = "앨범 표지 편집 완료 · 저장을 누르면 음악 파일에 반영됩니다."
+                },
+                onRemove = {
+                    artworkRemoved = true
+                    artworkBytes = null
+                    artworkEditingUri = null
+                    status = "앨범 표지 삭제 선택됨 · 저장을 누르면 반영됩니다."
+                },
+            )
+        }
         val info = originalInfo
         val originalExtension = info?.fileName?.substringAfterLast('.', "")?.lowercase().orEmpty()
         val requestedExtension = fileName.substringAfterLast('.', "").lowercase()
@@ -747,8 +759,16 @@ private fun MusicMagicApp() {
 
                     SectionCard(title = "앨범아트", icon = Icons.Rounded.MusicNote) {
                         MagicButton(onClick = { artPicker.launch("image/*") }, enabled = !busy) {
-                            Text(if (artworkBytes == null) "표지 이미지 선택" else "새 표지 선택됨 · 변경하기")
+                            Text(if (artworkBytes == null) "표지 편집 · 자르기 · 회전" else "편집된 표지 다시 변경")
                         }
+                        MagicButton(onClick = {
+                            artworkBytes = null
+                            artworkRemoved = true
+                            status = "표지 제거를 선택했어요. 저장 버튼을 눌러 적용하세요."
+                        }, enabled = !busy) { Text("앨범 커버 제거") }
+                        if (artworkRemoved) Text("표지 제거 예정")
+                        else if (artworkBytes != null)
+                            Text("새 표지 준비 완료 · ${ArtworkEditing.mime(artworkBytes!!)}")
                     }
 
                     SectionCard(title = "오디오 상세", icon = Icons.Rounded.Info) {
@@ -799,6 +819,7 @@ private fun MusicMagicApp() {
                             Text(label + ": " + pair.first.take(48) + " → " + pair.second.take(48))
                         }
                         if (artworkBytes != null) Text("앨범아트: 새 이미지로 변경")
+                        if (artworkRemoved) Text("앨범아트: 표지 제거")
                     }
 
                     if (status.isNotBlank()) {
@@ -833,6 +854,7 @@ private fun MusicMagicApp() {
                                             track = track,
                                             lyrics = lyrics,
                                             artwork = artworkBytes,
+                                            removeArtwork = artworkRemoved,
                                         ),
                                     )
                                 }
