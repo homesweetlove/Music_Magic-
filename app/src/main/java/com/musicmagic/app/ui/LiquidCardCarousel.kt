@@ -443,7 +443,7 @@ private fun LiquidCarouselCard(
 }
 
 @Composable
-private fun rememberLiquidMotionEnabled(): Boolean {
+internal fun rememberLiquidMotionEnabled(): Boolean {
     val resolver = LocalContext.current.contentResolver
     var enabled by remember(resolver) { mutableStateOf(ValueAnimator.areAnimatorsEnabled()) }
     DisposableEffect(resolver) {
