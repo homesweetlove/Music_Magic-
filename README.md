@@ -51,6 +51,18 @@ Android 10+ · API 29+ · Debug-signed preview · Google Play 배포 없음 / No
 > **미리보기 빌드 / Preview build** — 개발용 서명(debug) APK이며 Google Play 배포판이 아닙니다. / This APK uses a debug signing key and is distributed as a preview outside Google Play.
 
 <a id="features"></a>
+## New: iOS-inspired UI (development branch)
+
+The [Fluid Music Player PR #1](https://github.com/homesweetlove/Music_Magic-/pull/1) now includes an
+Apple Music-inspired now-playing screen, artwork-reactive ambient colors, a
+translucent playback sheet, an Up Next preview, larger headings, rounded grouped
+editor cards, a custom navigation drawer, and system light/dark appearance.
+These elements are built in Jetpack Compose for Android; they do not include
+Apple's proprietary UI resources or native iOS Liquid Glass.
+
+See [design system notes](docs/DESIGN.md). **The release APK linked above
+is the older version; a verified new APK has not been published yet.**
+
 ## 할 수 있는 일 · Features
 
 앱 안의 표시만 바꾸는 대신 **실제 오디오 파일에 메타데이터를 기록**합니다. 기본 저장은 선택한 원본 파일을 덮어씁니다.<br />
