@@ -51,6 +51,18 @@ Android 10+ · API 29+ · Debug-signed preview · Google Play 배포 없음 / No
 > **미리보기 빌드 / Preview build** — 개발용 서명(debug) APK이며 Google Play 배포판이 아닙니다. / This APK uses a debug signing key and is distributed as a preview outside Google Play.
 
 <a id="features"></a>
+## Immersive liquid motion — development branch
+
+**Now Playing includes a real animated portal**, beyond a plain background
+gradient: colored swirling fluid ribbons, a breathing glow, stronger spring
+depth and motion blur while swiping, plus Android 13+ lens distortion of the
+album art itself. The vortex responds to the selected cover color and the
+player's playing/paused state. This is *not* true audio-spectrum/beat
+synchronization. Android's reduced-motion and low-memory conditions receive a
+lighter fallback. The metadata editor carousel stays calm and accessible.
+
+Visual concept inspired by [Inspora: Fluid liquid card carousel](https://www.inspora.design/posts/fluid-liquid-card-carousel).
+
 ## Music library and playback additions (development branch)
 
 - **Automatic folder restoration:** after choosing a folder through Android SAF, Music Magic remembers the tree URI and rescans it at launch. If the provider revokes permission, choose the folder again.
