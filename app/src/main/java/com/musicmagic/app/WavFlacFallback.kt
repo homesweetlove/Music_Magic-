@@ -30,6 +30,7 @@ object WavFlacFallback {
     private data class Pcm(val sampleRate: Int, val channels: Int, val offset: Long, val length: Long)
 
     fun convert(context: Context, source: Uri, edits: AudioEdits): Result<SaveResult> = runCatching {
+        org.jaudiotagger.tag.TagOptionSingleton.getInstance().setAndroid(true)
         val wav = File.createTempFile("musicmagic-source-", ".wav", context.cacheDir)
         val flac = File.createTempFile("musicmagic-fallback-", ".flac", context.cacheDir)
         var destination: Uri? = null
@@ -60,11 +61,7 @@ object WavFlacFallback {
                 FieldKey.TRACK to edits.track, FieldKey.LYRICS to edits.lyrics,
             )) if (value.isNotBlank()) tag.setField(key, value)
             if (edits.artwork != null) {
-                val tempArt = File.createTempFile("musicmagic-flac-cover-", ".jpg", context.cacheDir)
-                try {
-                    tempArt.writeBytes(edits.artwork)
-                    tag.setField(org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(tempArt))
-                } finally { tempArt.delete() }
+                tag.setField(AudioMetadata.androidArtwork(edits.artwork))
             }
             tagged.setTag(tag)
             AudioFileIO.write(tagged)
