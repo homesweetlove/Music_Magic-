@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.gestures.TargetedFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -222,6 +223,7 @@ fun LiquidCardCarousel(
     val pageDescription = "${items.size}개 중 ${settledPage + 1}번째 카드"
 
     Column(modifier.semantics { isTraversalGroup = true }) {
+        Box(Modifier.fillMaxWidth()) {
         HorizontalPager(
             state = pager,
             modifier = Modifier.fillMaxWidth(),
@@ -249,6 +251,19 @@ fun LiquidCardCarousel(
                     .then(if (page != pager.currentPage) Modifier.clearAndSetSemantics { } else Modifier),
                 onAction = { onAction(item) },
             )
+        }
+        if (immersive && motionEnabled && !lowRam && items.size > 1) {
+            LiquidMorphBridge(
+                from = { items.getOrNull(pager.currentPage)?.accent ?: Color.Transparent },
+                to = {
+                    val n = pager.currentPage +
+                        if (pager.currentPageOffsetFraction >= 0f) 1 else -1
+                    items.getOrNull(n)?.accent ?: Color.Transparent
+                },
+                progress = { pager.currentPageOffsetFraction },
+                modifier = Modifier.matchParentSize(),
+            )
+        }
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
