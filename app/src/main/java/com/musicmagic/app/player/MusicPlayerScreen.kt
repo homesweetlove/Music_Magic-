@@ -259,6 +259,15 @@ fun MusicPlayerScreen(
         } else {
             // The existing carousel implements spring snapping, neighboring previews and
             // graceful reduced-motion/low-RAM fallbacks inspired by Inspora.
+            MaterialTheme(
+                colorScheme = MaterialTheme.colorScheme.copy(
+                    surface = Color(0xFF191B25),
+                    onSurface = Color.White,
+                    onSurfaceVariant = Color.White.copy(alpha = 0.75f),
+                    primary = Color.White,
+                    onPrimary = Color(0xFF191B25),
+                ),
+            ) {
             LiquidCardCarousel(
                 items = tracks.map { song ->
                     val art = artworks[song.uri.toString()]
@@ -278,6 +287,7 @@ fun MusicPlayerScreen(
                 },
                 onAction = { card -> play(tracks.indexOfFirst { it.uri.toString() == card.id }) },
             )
+            }
 
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
