@@ -52,6 +52,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -107,6 +108,8 @@ fun MusicPlayerScreen(
     var draggedProgress by remember { mutableStateOf(0f) }
     var shuffle by remember { mutableStateOf(false) }
     var repeatMode by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
+    var showLyrics by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     DisposableEffect(context) {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
@@ -177,16 +180,16 @@ fun MusicPlayerScreen(
     val accent by animateColorAsState(target, animationSpec = tween(550), label = "album cover tint")
     val backdrop by animateColorAsState(lerp(Color(0xFF0B1020), accent, 0.43f), tween(600), label = "fluid backdrop")
 
-    fun play(index: Int) {
+    fun play(index: Int, source: List<LibraryTrack> = tracks) {
         val connected = controller ?: run { error = "플레이어를 연결하는 중입니다."; return }
-        if (index !in tracks.indices) return
+        if (index !in source.indices) return
         error = ""
-        val id = tracks[index].uri.toString()
-        if (connected.currentMediaItem?.mediaId == id && connected.mediaItemCount == tracks.size) {
+        val id = source[index].uri.toString()
+        if (connected.currentMediaItem?.mediaId == id && connected.mediaItemCount == source.size) {
             connected.play()
             return
         }
-        val queue = tracks.map { track ->
+        val queue = source.map { track ->
             MediaItem.Builder()
                 .setMediaId(track.uri.toString())
                 .setUri(track.uri)
@@ -199,9 +202,14 @@ fun MusicPlayerScreen(
                 )
                 .build()
         }
+        // PlaybackService enriches the active media item with embedded album art.
         connected.setMediaItems(queue, index, 0L)
         connected.prepare()
         connected.play()
+    }
+
+    fun playCollection(source: List<LibraryTrack>) {
+        if (source.isNotEmpty()) play(0, source)
     }
 
     Column(
@@ -376,6 +384,28 @@ fun MusicPlayerScreen(
                 if (error.isNotBlank()) Text(error, color = Color(0xFFFFC4B6), style = MaterialTheme.typography.bodySmall)
                 }
             }
+
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 25.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("LYRICS", fontSize = 11.sp, letterSpacing = 1.4.sp,
+                    fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.72f))
+                TextButton(onClick = { showLyrics = !showLyrics }) {
+                    Text(if (showLyrics) "가사 닫기" else "가사 보기", color = Color.White)
+                }
+            }
+            if (showLyrics) LyricsPanel(
+                uri = displayTrack?.uri, revision = revision,
+                positionMs = position, onSeek = { controller?.seekTo(it) },
+            )
+            CollectionsPanel(
+                tracks = tracks,
+                selected = displayTrack,
+                revision = revision,
+                onPlayQueue = ::playCollection,
+            )
 
             if (tracks.size > 1) {
                 Column(
