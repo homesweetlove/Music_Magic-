@@ -17,6 +17,9 @@ import com.musicmagic.app.ui.AudioComparison
 import com.musicmagic.app.ui.AudioComparisonCarousel
 import com.musicmagic.app.ui.MusicLibraryCarousel
 import com.musicmagic.app.ui.SelectedMusicCarousel
+import com.musicmagic.app.ui.GlassIconButton
+import com.musicmagic.app.ui.MagicButton
+import com.musicmagic.app.ui.MagicTypography
 import com.musicmagic.app.player.MusicPlayerScreen
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -28,6 +31,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,7 +58,9 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Headphones
-import androidx.compose.material3.Button
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -87,11 +94,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val IosBlue = Color(0xFF0A84FF)
+private val IosBlue = Color(0xFF007AFF)
 private val IosGreen = Color(0xFF30D158)
 private val IosOrange = Color(0xFFFF9F0A)
 private val LightBackground = Color(0xFFF2F2F7)
-private val DarkBackground = Color(0xFF000000)
+private val DarkBackground = Color(0xFF09090C)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -309,21 +316,33 @@ private fun MusicMagicApp() {
 
     val colors = if (dark) {
         darkColorScheme(
-            primary = IosBlue,
+            primary = Color(0xFF0A84FF),
+            onPrimary = Color.White,
             background = DarkBackground,
+            onBackground = Color(0xFFF5F5F7),
             surface = Color(0xFF1C1C1E),
-            surfaceVariant = Color(0xFF2C2C2E),
+            onSurface = Color(0xFFF5F5F7),
+            surfaceVariant = Color(0xFF29292D),
+            onSurfaceVariant = Color(0xFFC7C7CC),
+            secondaryContainer = Color(0xFF1D3048),
+            onSecondaryContainer = Color(0xFF91C6FF),
         )
     } else {
         lightColorScheme(
             primary = IosBlue,
+            onPrimary = Color.White,
             background = LightBackground,
+            onBackground = Color(0xFF1C1C1E),
             surface = Color.White,
-            surfaceVariant = Color(0xFFE5E5EA),
+            onSurface = Color(0xFF1C1C1E),
+            surfaceVariant = Color(0xFFE9E9EE),
+            onSurfaceVariant = Color(0xFF636366),
+            secondaryContainer = Color(0xFFE5F0FF),
+            onSecondaryContainer = Color(0xFF0065CF),
         )
     }
 
-    MaterialTheme(colorScheme = colors) {
+    MaterialTheme(colorScheme = colors, typography = MagicTypography) {
         val info = originalInfo
         val originalExtension = info?.fileName?.substringAfterLast('.', "")?.lowercase().orEmpty()
         val requestedExtension = fileName.substringAfterLast('.', "").lowercase()
@@ -344,24 +363,59 @@ private fun MusicMagicApp() {
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
-                ModalDrawerSheet {
-                    Spacer(Modifier.height(28.dp))
-                    Text("Music Magic", modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
-                        style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                ModalDrawerSheet(
+                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface,
+                ) {
+                    Spacer(Modifier.height(34.dp))
+                    Row(Modifier.padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(54.dp).background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(18.dp)
+                            ),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(29.dp)) }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("Music Magic", style = MaterialTheme.typography.headlineSmall)
+                            Text("YOUR SOUND STUDIO", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                fontSize = 10.sp, letterSpacing = 1.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(36.dp))
+                    Text("LIBRARY", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.46f),
+                        fontSize = 11.sp, letterSpacing = 1.5.sp,
+                        modifier = Modifier.padding(start = 27.dp, bottom = 9.dp))
                     NavigationDrawerItem(
-                        label = { Text("음악 정보 편집") },
+                        label = { Text("음악 정보 편집", fontWeight = FontWeight.Medium) },
                         selected = currentScreen == "editor",
                         icon = { Icon(Icons.Rounded.Edit, null) },
                         onClick = { currentScreen = "editor"; scope.launch { drawerState.close() } },
+                        shape = RoundedCornerShape(19.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.11f),
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                        ),
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
                     NavigationDrawerItem(
-                        label = { Text("뮤직 플레이어") },
+                        label = { Text("뮤직 플레이어", fontWeight = FontWeight.Medium) },
                         selected = currentScreen == "player",
                         icon = { Icon(Icons.Rounded.Headphones, null) },
                         onClick = { currentScreen = "player"; scope.launch { drawerState.close() } },
+                        shape = RoundedCornerShape(19.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.11f),
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                        ),
                         modifier = Modifier.padding(horizontal = 12.dp),
                     )
+                    Spacer(Modifier.weight(1f))
+                    Text("MADE FOR YOUR MUSIC", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        fontSize = 10.sp, letterSpacing = 1.2.sp,
+                        modifier = Modifier.padding(start = 27.dp, bottom = 32.dp))
                 }
             },
         ) {
@@ -389,25 +443,57 @@ private fun MusicMagicApp() {
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Spacer(Modifier.height(18.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                        Icon(Icons.Rounded.Menu, contentDescription = "메뉴 열기")
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    GlassIconButton(
+                        icon = Icons.Rounded.Menu, contentDescription = "메뉴 열기",
+                        onClick = { scope.launch { drawerState.open() } },
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.095f),
+                        shape = RoundedCornerShape(30.dp),
+                    ) {
+                        Text("●  OFFLINE STUDIO", modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold,
+                            fontSize = 10.sp, letterSpacing = 1.sp)
                     }
-                    Text("LIBRARY & EDITOR", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 }
-
+                Spacer(Modifier.height(1.dp))
+                Text("Music Magic", style = MaterialTheme.typography.displayLarge)
                 Text(
-                    text = "Music Magic",
-                    fontSize = 36.sp,
-                    lineHeight = 40.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "파일 자체의 음악 정보를 바꿔요.",
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.56f),
+                    text = "당신의 음악, 더 아름답게.",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                     fontSize = 16.sp,
+                )
+                Surface(
+                    shape = RoundedCornerShape(25.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (dark) 0.14f else 0.075f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.padding(horizontal = 18.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(52.dp).background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                RoundedCornerShape(17.dp),
+                            ), contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Rounded.Headphones, null, tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("나만의 뮤직 스튜디오", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("앨범 감상부터 메타데이터 편집까지",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f))
+                        }
+                        GlassIconButton(
+                            icon = Icons.Rounded.Headphones, contentDescription = "뮤직 플레이어 열기",
+                            onClick = { currentScreen = "player" },
+                            tint = MaterialTheme.colorScheme.primary,
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                        )
+                    }
                 )
 
                 if (libraryTracks.isNotEmpty()) {
@@ -415,11 +501,11 @@ private fun MusicMagicApp() {
                 }
 
                 SectionCard(title = "폴더 · 일괄 편집", icon = Icons.Rounded.FolderOpen) {
-                    Button(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
+                    MagicButton(onClick = { folderPicker.launch(null) }, enabled = !busy) { Text("음악 폴더 선택") }
                     Text("${folderFiles.size}곡 선택됨")
                     EditorField("일괄 아티스트 (빈칸은 유지)", batchArtist, { batchArtist = it })
                     EditorField("일괄 앨범 (빈칸은 유지)", batchAlbum, { batchAlbum = it })
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         busy = true
                         scope.launch {
                             val (message, savedFiles) = withContext(Dispatchers.IO) {
@@ -453,7 +539,7 @@ private fun MusicMagicApp() {
                             busy = false
                         }
                     }, enabled = !busy && folderFiles.isNotEmpty() && (batchArtist.isNotBlank() || batchAlbum.isNotBlank())) { Text("선택 폴더 일괄 저장") }
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         busy = true
                         scope.launch {
                             batchStatus = withContext(Dispatchers.IO) {
@@ -484,7 +570,7 @@ private fun MusicMagicApp() {
                     }
                 }
 
-                Button(onClick = {
+                MagicButton(onClick = {
                     busy = true
                     scope.launch {
                         val undoPrefs = context.getSharedPreferences("musicmagic", android.content.Context.MODE_PRIVATE)
@@ -529,10 +615,10 @@ private fun MusicMagicApp() {
                                 onArt = { artPicker.launch("image/*") }, onPlay = { preview(uri) })
                         }
                     }
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         selectedUri?.let(::preview)
                     }, enabled = !busy) { Text("▶ 음악 미리듣기") }
-                    Button(onClick = { player?.release(); player = null }, enabled = player != null) { Text("■ 재생 정지") }
+                    MagicButton(onClick = { player?.release(); player = null }, enabled = player != null) { Text("■ 재생 정지") }
                     SectionCard(title = "음악 정보", icon = Icons.Rounded.MusicNote) {
                         EditorField("제목", title, { title = it })
                         DividerInset()
@@ -543,7 +629,7 @@ private fun MusicMagicApp() {
                         EditorField("앨범 아티스트", albumArtist, { albumArtist = it })
                     }
 
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         busy = true
                         scope.launch {
                             val result = withContext(Dispatchers.IO) { MusicBrainzLookup.search(title, artist) }
@@ -570,7 +656,7 @@ private fun MusicMagicApp() {
                     }
 
                     SectionCard(title = "빠른 태그 정리", icon = Icons.Rounded.Edit) {
-                        Button(onClick = {
+                        MagicButton(onClick = {
                             val base = fileName.substringBeforeLast('.', fileName)
                             val parts = base.split(" - ", limit = 2)
                             if (parts.size == 2) {
@@ -579,7 +665,7 @@ private fun MusicMagicApp() {
                                 status = "파일명에서 아티스트·제목을 추출했어요. 확인 후 저장하세요."
                             } else status = "파일명이 '아티스트 - 제목' 형식이어야 합니다."
                         }) { Text("파일명에서 제목·아티스트 추출") }
-                        Button(onClick = {
+                        MagicButton(onClick = {
                             fun clean(value: String) = value.trim().replace(Regex("\\s+"), " ")
                             title = clean(title); artist = clean(artist); album = clean(album)
                             albumArtist = clean(albumArtist); genre = clean(genre)
@@ -596,7 +682,7 @@ private fun MusicMagicApp() {
                     }
 
                     SectionCard(title = "앨범아트", icon = Icons.Rounded.MusicNote) {
-                        Button(onClick = { artPicker.launch("image/*") }, enabled = !busy) {
+                        MagicButton(onClick = { artPicker.launch("image/*") }, enabled = !busy) {
                             Text(if (artworkBytes == null) "표지 이미지 선택" else "새 표지 선택됨 · 변경하기")
                         }
                     }
@@ -605,20 +691,20 @@ private fun MusicMagicApp() {
                         Text("길이: ${info.durationSeconds}초 · 비트레이트: ${info.bitRate} · 샘플레이트: ${info.sampleRate}")
                     }
 
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         exportSource = selectedUri?.let { it to info }
                         val base = info.fileName.substringBeforeLast('.', info.fileName)
                         wavPicker.launch(base + ".wav")
                     }, enabled = !busy) { Text("실제 PCM WAV로 변환하여 새 파일 저장") }
 
-                    Button(onClick = {
+                    MagicButton(onClick = {
                         exportSource = selectedUri?.let { it to info }
                         m4aPicker.launch(info.fileName.substringBeforeLast('.', info.fileName) + ".m4a")
                     }, enabled = !busy) { Text("AAC M4A로 실제 인코딩하여 새 파일 저장") }
 
                     SectionCard(title = "파일", icon = Icons.Rounded.AudioFile) {
                         EditorField("파일명 · 확장자", fileName, { fileName = it })
-                        Button(onClick = {
+                        MagicButton(onClick = {
                             val ext = info.fileName.substringAfterLast('.', "")
                             val base = listOf(artist, title).map { it.trim().replace("/", "_").replace(":", "_") }.filter { it.isNotBlank() }.joinToString(" - ")
                             if (base.isNotBlank()) fileName = base + if (ext.isBlank()) "" else "." + ext
@@ -659,7 +745,7 @@ private fun MusicMagicApp() {
                         )
                     }
 
-                    Button(
+                    MagicButton(
                         onClick = {
                             val uri = selectedUri ?: return@Button
                             busy = true
@@ -737,9 +823,10 @@ private fun MusicMagicApp() {
 private fun FilePickerCard(info: AudioInfo?, busy: Boolean, onPick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        tonalElevation = 0.dp,
-        shadowElevation = 1.dp,
+        shape = RoundedCornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f)),
+        shadowElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -748,8 +835,8 @@ private fun FilePickerCard(info: AudioInfo?, busy: Boolean, onPick: () -> Unit) 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(50.dp)
-                        .background(IosBlue.copy(alpha = 0.13f), RoundedCornerShape(15.dp)),
+                        .size(54.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f), RoundedCornerShape(18.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -779,14 +866,14 @@ private fun FilePickerCard(info: AudioInfo?, busy: Boolean, onPick: () -> Unit) 
                     )
                 }
             }
-            Button(
+            MagicButton(
                 onClick = onPick,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(15.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    contentColor = MaterialTheme.colorScheme.primary,
                 ),
             ) {
                 Text(if (info == null) "파일 열기" else "다른 파일 선택")
@@ -801,26 +888,32 @@ private fun SectionCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
-            modifier = Modifier.padding(start = 4.dp),
+            modifier = Modifier.padding(start = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, null, modifier = Modifier.size(17.dp), tint = IosBlue)
-            Spacer(Modifier.width(6.dp))
+            Icon(icon, null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(7.dp))
             Text(
-                text = title,
-                fontSize = 14.sp,
+                text = title.uppercase(),
+                fontSize = 11.sp,
+                letterSpacing = 1.15.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.54f),
             )
         }
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            shadowElevation = 0.5.dp,
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f)),
+            shadowElevation = 0.dp,
         ) {
-            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
                 content()
             }
         }
@@ -829,13 +922,20 @@ private fun SectionCard(
 
 @Composable
 private fun EditorField(label: String, value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
+    TextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label) },
+        label = { Text(label, fontSize = 13.sp) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         shape = RoundedCornerShape(14.dp),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            disabledContainerColor = Color.Transparent,
+            focusedIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+            unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.075f),
+        ),
     )
 }
 
@@ -880,8 +980,8 @@ private fun Notice(text: String, color: Color, success: Boolean = false) {
 private fun SupportedFormatsCard() {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(22.dp),
     ) {
         Column(modifier = Modifier.padding(15.dp)) {
             Text("지원 형식", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
