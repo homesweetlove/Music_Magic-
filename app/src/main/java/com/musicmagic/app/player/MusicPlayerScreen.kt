@@ -4,8 +4,11 @@ import android.content.ComponentName
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +40,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,6 +74,7 @@ import androidx.media3.session.SessionToken
 import com.musicmagic.app.library.CoverArt
 import com.musicmagic.app.library.LibraryMedia
 import com.musicmagic.app.library.LibraryTrack
+import com.musicmagic.app.ui.GlassIconButton
 import com.musicmagic.app.ui.LiquidCardCarousel
 import com.musicmagic.app.ui.LiquidCardItem
 import kotlinx.coroutines.Dispatchers
@@ -199,24 +206,41 @@ fun MusicPlayerScreen(
 
     Column(
         Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(listOf(backdrop, Color(0xFF10111B), Color(0xFF090A10))))
+            .background(Brush.verticalGradient(listOf(
+                lerp(accent, Color(0xFF10131C), 0.6f),
+                backdrop, Color(0xFF12121C), Color(0xFF090A10),
+            )))
+            .background(Brush.radialGradient(listOf(accent.copy(alpha = 0.13f), Color.Transparent), radius = 960f))
             .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 36.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(bottom = 38.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(top = 14.dp, start = 10.dp, end = 10.dp),
+            Modifier.fillMaxWidth().padding(top = 14.dp, start = 22.dp, end = 22.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onMenu) { Icon(Icons.Rounded.Menu, "메뉴 열기", tint = Color.White) }
-            Text("MUSIC MAGIC", color = Color.White, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.weight(1f))
-            IconButton(onClick = onPickFolder) { Icon(Icons.Rounded.FolderOpen, "음악 폴더 선택", tint = Color.White) }
+            GlassIconButton(
+                icon = Icons.Rounded.Menu, contentDescription = "메뉴 열기", onClick = onMenu,
+                tint = Color.White, containerColor = Color.White.copy(alpha = 0.12f),
+                borderColor = Color.White.copy(alpha = 0.15f),
+            )
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("MUSIC MAGIC", color = Color.White.copy(alpha = 0.63f),
+                    fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.SemiBold)
+                Text("지금 듣기", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+            GlassIconButton(
+                icon = Icons.Rounded.FolderOpen, contentDescription = "음악 폴더 선택", onClick = onPickFolder,
+                tint = Color.White, containerColor = Color.White.copy(alpha = 0.12f),
+                borderColor = Color.White.copy(alpha = 0.15f),
+            )
         }
 
-        Column(Modifier.padding(horizontal = 22.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Your sound, in color.", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-            Text("앨범 커버의 색으로 채워지는 나만의 플레이어", color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp)
+        Column(Modifier.padding(horizontal = 25.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Feel every note.", color = Color.White, fontSize = 31.sp,
+                fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp)
+            Text("앨범마다 달라지는 컬러와 음악의 분위기", color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp)
         }
 
         if (tracks.isEmpty()) {
@@ -228,7 +252,8 @@ fun MusicPlayerScreen(
                 Icon(Icons.Rounded.MusicNote, null, tint = Color.White, modifier = Modifier.size(52.dp))
                 Text("재생할 음악이 없어요", color = Color.White, style = MaterialTheme.typography.titleLarge)
                 Text("오프라인 음악 폴더나 파일을 선택하면 앨범별 카드가 나타납니다.", color = Color.White.copy(alpha = 0.7f))
-                Button(onClick = onPickFolder) { Text("음악 폴더 열기") }
+                Button(onClick = onPickFolder, shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF121420))) { Text("음악 폴더 열기") }
                 TextButton(onClick = onPickFile) { Text("음악 파일 하나 선택", color = Color.White) }
             }
         } else {
@@ -254,16 +279,29 @@ fun MusicPlayerScreen(
                 onAction = { card -> play(tracks.indexOfFirst { it.uri.toString() == card.id }) },
             )
 
-            Column(Modifier.fillMaxWidth().padding(horizontal = 25.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                shape = RoundedCornerShape(32.dp),
+                color = Color.White.copy(alpha = 0.105f),
+                contentColor = Color.White,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
+            ) {
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 21.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(if (activeTrack != null) "지금 재생 중" else "선택한 곡", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        Text(if (activeTrack != null) "NOW PLAYING" else "SELECTED TRACK",
+                            color = Color.White.copy(alpha = 0.63f), fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold, letterSpacing = 1.7.sp)
                         Text(displayTrack?.title.orEmpty(), color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(displayTrack?.artist.orEmpty(), color = Color.White.copy(alpha = 0.69f), fontSize = 14.sp, maxLines = 1)
                     }
-                    IconButton(onClick = { focus?.let { onEdit(it.uri) } }) {
-                        Icon(Icons.Rounded.Edit, "선택한 곡 정보 편집", tint = Color.White)
-                    }
+                    GlassIconButton(
+                        icon = Icons.Rounded.Edit, contentDescription = "선택한 곡 정보 편집",
+                        onClick = { focus?.let { onEdit(it.uri) } },
+                        tint = Color.White, containerColor = Color.White.copy(alpha = 0.11f),
+                        borderColor = Color.White.copy(alpha = 0.13f),
+                    )
                 }
 
                 Slider(
@@ -274,6 +312,11 @@ fun MusicPlayerScreen(
                         dragging = false
                     },
                     enabled = duration > 0L,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color.White,
+                        activeTrackColor = Color.White,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.22f),
+                    ),
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(formatTime(position), color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp)
@@ -294,7 +337,7 @@ fun MusicPlayerScreen(
                             else controller?.play()
                         },
                         enabled = controller != null,
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(50.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF111322)),
                         modifier = Modifier.size(76.dp),
                         contentPadding = PaddingValues(0.dp),
@@ -317,9 +360,60 @@ fun MusicPlayerScreen(
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
-                Text("${tracks.size}곡 · 로컬 파일 재생", color = Color.White.copy(alpha = 0.65f), style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(5.dp))
+                Text("${tracks.size}곡 · OFFLINE LIBRARY", color = Color.White.copy(alpha = 0.58f),
+                    style = MaterialTheme.typography.labelMedium, letterSpacing = 0.9.sp)
                 if (error.isNotBlank()) Text(error, color = Color(0xFFFFC4B6), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            if (tracks.size > 1) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("UP NEXT", color = Color.White.copy(alpha = 0.67f),
+                        fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.6.sp, modifier = Modifier.padding(start = 4.dp))
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.White.copy(alpha = 0.065f),
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(24.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.085f)),
+                    ) {
+                        Column(Modifier.padding(vertical = 7.dp)) {
+                            val nextStart = if (activeIndex in tracks.indices) activeIndex else focusIndex
+                            (1..minOf(3, tracks.size - 1)).forEach { offset ->
+                                val index = (nextStart + offset) % tracks.size
+                                val song = tracks[index]
+                                Row(
+                                    Modifier.fillMaxWidth().clickable { play(index) }
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(Modifier.size(42.dp)
+                                        .background(accent.copy(alpha = 0.28f), RoundedCornerShape(12.dp)),
+                                        contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Rounded.MusicNote, null, tint = Color.White,
+                                            modifier = Modifier.size(20.dp))
+                                    }
+                                    Spacer(Modifier.width(13.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(song.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(song.artist, fontSize = 12.sp,
+                                            color = Color.White.copy(alpha = 0.61f),
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Icon(Icons.Rounded.PlayArrow, contentDescription = "이 곡 재생",
+                                        tint = Color.White.copy(alpha = 0.74f),
+                                        modifier = Modifier.size(21.dp))
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
