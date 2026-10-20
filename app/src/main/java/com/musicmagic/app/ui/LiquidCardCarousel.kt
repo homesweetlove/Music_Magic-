@@ -330,7 +330,8 @@ private fun LiquidCarouselCard(
                     rotationZ = -offset() * 6f
                     rotationY = offset() * 11f
                     translationY = distance * 22.dp.toPx()
-                    cameraDistance = 18.dp.toPx()
+                    // Hundreds of pixels avoids an inverted plane at the edges.
+                    cameraDistance = 640.dp.toPx()
                     alpha = 1f - distance * .23f
                 } else {
                     scaleX = 1f - distance * .035f + stretch * .012f
