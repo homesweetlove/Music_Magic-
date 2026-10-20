@@ -308,7 +308,7 @@ fun MusicPlayerScreen(
                     }
                     GlassIconButton(
                         icon = Icons.Rounded.Edit, contentDescription = "선택한 곡 정보 편집",
-                        onClick = { focus?.let { onEdit(it.uri) } },
+                        onClick = { displayTrack?.let { onEdit(it.uri) } },
                         tint = Color.White, containerColor = Color.White.copy(alpha = 0.11f),
                         borderColor = Color.White.copy(alpha = 0.13f),
                     )
