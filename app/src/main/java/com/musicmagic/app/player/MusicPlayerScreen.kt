@@ -108,6 +108,7 @@ fun MusicPlayerScreen(
     var draggedProgress by remember { mutableStateOf(0f) }
     var shuffle by remember { mutableStateOf(false) }
     var repeatMode by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
+    var queueVersion by remember { mutableIntStateOf(0) }
     var showLyrics by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -117,6 +118,7 @@ fun MusicPlayerScreen(
         var attached = true
         val listener = object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
+                if (events.contains(Player.EVENT_TIMELINE_CHANGED)) queueVersion++
                 playing = player.isPlaying
                 currentId = player.currentMediaItem?.mediaId
                 duration = player.duration.takeIf { it > 0L } ?: 0L
@@ -166,6 +168,14 @@ fun MusicPlayerScreen(
     val activeIndex = tracks.indexOfFirst { it.uri.toString() == currentId }
     val activeTrack = tracks.getOrNull(activeIndex)
     val displayTrack = activeTrack ?: focus
+    val queuedTracks = remember(controller, queueVersion, currentId, tracks) {
+        controller?.let { connected ->
+            (0 until connected.mediaItemCount).mapNotNull { index ->
+                val id = connected.getMediaItemAt(index).mediaId
+                tracks.firstOrNull { it.uri.toString() == id }
+            }
+        }.orEmpty()
+    }
     val artworks by produceState<Map<String, CoverArt>>(emptyMap(), tracks, focusIndex, activeIndex, revision) {
         value = withContext(Dispatchers.IO) {
             val indices = ((maxOf(0, focusIndex - 1)..minOf(tracks.lastIndex, focusIndex + 1)).toList() +
@@ -185,7 +195,10 @@ fun MusicPlayerScreen(
         if (index !in source.indices) return
         error = ""
         val id = source[index].uri.toString()
-        if (connected.currentMediaItem?.mediaId == id && connected.mediaItemCount == source.size) {
+        val sameQueue = connected.mediaItemCount == source.size && source.indices.all {
+            connected.getMediaItemAt(it).mediaId == source[it].uri.toString()
+        }
+        if (connected.currentMediaItem?.mediaId == id && sameQueue) {
             connected.play()
             return
         }
@@ -407,7 +420,7 @@ fun MusicPlayerScreen(
                 onPlayQueue = ::playCollection,
             )
 
-            if (tracks.size > 1) {
+            if (queuedTracks.size > 1) {
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -423,12 +436,13 @@ fun MusicPlayerScreen(
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.085f)),
                     ) {
                         Column(Modifier.padding(vertical = 7.dp)) {
-                            val nextStart = if (activeIndex in tracks.indices) activeIndex else focusIndex
-                            (1..minOf(3, tracks.size - 1)).forEach { offset ->
-                                val index = (nextStart + offset) % tracks.size
-                                val song = tracks[index]
+                            val queueIndex = queuedTracks.indexOfFirst { it.uri.toString() == currentId }
+                            val nextStart = queueIndex.coerceAtLeast(0)
+                            (1..minOf(3, queuedTracks.size - 1)).forEach { offset ->
+                                val index = (nextStart + offset) % queuedTracks.size
+                                val song = queuedTracks[index]
                                 Row(
-                                    Modifier.fillMaxWidth().clickable { play(index) }
+                                    Modifier.fillMaxWidth().clickable { play(index, queuedTracks) }
                                         .padding(horizontal = 16.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
