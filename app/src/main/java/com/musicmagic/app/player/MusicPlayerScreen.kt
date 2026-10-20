@@ -152,19 +152,22 @@ fun MusicPlayerScreen(
     }
 
     val focus = tracks.getOrNull(focusIndex)
-    val artworks by produceState<Map<String, CoverArt>>(emptyMap(), tracks, focusIndex, revision) {
-        value = withContext(Dispatchers.IO) {
-            (maxOf(0, focusIndex - 1)..minOf(tracks.lastIndex, focusIndex + 1))
-                .mapNotNull { index -> tracks.getOrNull(index)?.let { it.uri.toString() to LibraryMedia.cover(context, it.uri, revision) } }
-                .toMap()
-        }
-    }
-    val target = focus?.let { artworks[it.uri.toString()]?.accent } ?: Color(0xFF6389C8)
-    val accent by animateColorAsState(target, animationSpec = tween(550), label = "album cover tint")
-    val backdrop by animateColorAsState(lerp(Color(0xFF0B1020), accent, 0.43f), tween(600), label = "fluid backdrop")
     val activeIndex = tracks.indexOfFirst { it.uri.toString() == currentId }
     val activeTrack = tracks.getOrNull(activeIndex)
     val displayTrack = activeTrack ?: focus
+    val artworks by produceState<Map<String, CoverArt>>(emptyMap(), tracks, focusIndex, activeIndex, revision) {
+        value = withContext(Dispatchers.IO) {
+            val indices = ((maxOf(0, focusIndex - 1)..minOf(tracks.lastIndex, focusIndex + 1)).toList() +
+                listOf(activeIndex)).distinct().filter { it in tracks.indices }
+            indices.map { index ->
+                tracks[index].let { it.uri.toString() to LibraryMedia.cover(context, it.uri, revision) }
+            }.toMap()
+        }
+    }
+    // Background follows the currently PLAYING cover even if the user browses other cards.
+    val target = displayTrack?.let { artworks[it.uri.toString()]?.accent } ?: Color(0xFF6389C8)
+    val accent by animateColorAsState(target, animationSpec = tween(550), label = "album cover tint")
+    val backdrop by animateColorAsState(lerp(Color(0xFF0B1020), accent, 0.43f), tween(600), label = "fluid backdrop")
 
     fun play(index: Int) {
         val connected = controller ?: run { error = "플레이어를 연결하는 중입니다."; return }
@@ -252,6 +255,7 @@ fun MusicPlayerScreen(
             Column(Modifier.fillMaxWidth().padding(horizontal = 25.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
+                        Text(if (activeTrack != null) "지금 재생 중" else "선택한 곡", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
                         Text(displayTrack?.title.orEmpty(), color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(displayTrack?.artist.orEmpty(), color = Color.White.copy(alpha = 0.69f), fontSize = 14.sp, maxLines = 1)
                     }
