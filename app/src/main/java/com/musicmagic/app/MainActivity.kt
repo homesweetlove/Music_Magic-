@@ -747,7 +747,7 @@ private fun MusicMagicApp() {
 
                     MagicButton(
                         onClick = {
-                            val uri = selectedUri ?: return@Button
+                            val uri = selectedUri ?: return@MagicButton
                             busy = true
                             status = ""
                             success = false
