@@ -824,7 +824,9 @@ private fun MusicMagicApp() {
                                         libraryRevision++
                                         updateLibrary(uri, saved)
                                         success = true
-                                        status = "원본 파일에 저장했어요. 다른 플레이어에서도 이 메타데이터를 읽을 수 있습니다."
+                                        status = if (saved.convertedFromWav)
+                                             "WAV 앨범아트를 FLAC으로 무손실 변환해 새 파일로 저장했습니다. 기존 WAV 원본은 유지됩니다."
+                                         else "원본 파일에 저장했어요. 다른 플레이어에서도 이 메타데이터를 읽을 수 있습니다."
                                     },
                                     onFailure = { error ->
                                         success = false
