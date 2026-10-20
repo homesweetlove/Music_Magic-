@@ -115,7 +115,7 @@ object WavRiffTags {
         values.forEach { (key, value) ->
             if (value.isEmpty()) merged.remove(key) else merged[key] = value
         }
-        val artwork = edits.artwork ?: current.picture
+        val artwork = if (edits.removeArtwork) null else edits.artwork ?: current.picture
         if (artwork != null) require(artwork.size <= MAX_ART) { "표지는 12MB 이하만 저장할 수 있습니다." }
         val id3 = encodeId3(merged, artwork, current.extraFrames)
         val dest = File.createTempFile("musicmagic-riff-", ".wav", file.parentFile)
@@ -156,6 +156,7 @@ object WavRiffTags {
             values.forEach { (key, value) ->
                 check(verified.fields[key].orEmpty() == value) { "WAV $key 태그 기록 검증 실패" }
             }
+            if (edits.removeArtwork) check(verified.picture == null) { "WAV 표지 삭제 검증 실패" }
             if (artwork != null) check(verified.picture?.contentEquals(artwork) == true) {
                 "WAV 앨범 커버 기록 검증 실패"
             }
@@ -232,7 +233,7 @@ object WavRiffTags {
             writeFrame(frames, frameId, data)
         }
         if (picture != null) {
-            val bytes = byteArrayOf(0) + "image/jpeg".toByteArray(Charsets.ISO_8859_1) +
+            val bytes = byteArrayOf(0) + ArtworkEditing.mime(picture).toByteArray(Charsets.ISO_8859_1) +
                 byteArrayOf(0, 3, 0) + picture
             writeFrame(frames, "APIC", bytes)
         }
