@@ -54,6 +54,40 @@ No new permissions or networking are required. The system's reduced-motion
 setting and Android's low-RAM flag disable the animated vortex; the cards keep
 their navigation functions. Shader distortion is only used on Android 13+.
 
+### Music Magic 1.2 interaction suite
+
+- **Liquid Morph Bridge** connects departing and arriving album cards using
+  a finger-position-driven Bézier fluid neck, changing cover colors, soft
+  highlights and breaking droplets, drawn above the pager with no touch blocking.
+  Playback-only; editor cards remain calm.
+- **Mini Player expansion** uses a bottom-origin spring transition, and upward
+  swiping the mini player stretches and opens full-screen Now Playing.
+- **Cover editor** offers a square crop, pinch-like zoom slider, 90-degree
+  rotation, removal, plus selectable real PNG or JPEG output. The encoded
+  image's MIME is written correctly in FLAC/MP3/WAV/APIC tags, including
+  transparent PNG. The crop preview is bounded to avoid huge bitmaps.
+- **24/32-bit high-resolution** integer PCM WAV preserves original PCM during
+  tagging; optional fallback FLAC attempts these depths only if the Android
+  device's native FLAC encoder accepts them. Output FLAC STREAMINFO depth is
+  checked before saving; unsupported hardware fails safely rather than
+  dropping to 16-bit. Floating-point WAV and >2-channel fallback conversion
+  remain unsupported.
+- **Batch editing** selects subsets of scanned files and can write a shared
+  cover with common artist or album metadata. Processing is sequential,
+  reporting the number of successes/errors and retaining original backups.
+- **Edit history** stores up to eight records with before/after metadata and
+  private local backups for files <=40 MiB, capped at 120 MiB total. Larger
+  files keep only an audit summary; restoring requires an actual backup and
+  a still-valid SAF document URI. Clear history requires confirmation.
+- **Playlist sorting** persists the order mode: manual insertion order,
+  title, artist, album, recent file modification time and favorites first.
+  Dynamic artist and folder groups use scan metadata, not duplicated audio.
+
+Important: these are native Android components inspired by the reference,
+not copied copyrighted site content or a claim of pixel-perfect parity.
+Native-device frame pacing and third-party WAV artwork compatibility still
+need validation before a production release.
+
 ### Accessibility & performance
 
 - Icons for navigation/playback have Korean content descriptions.
