@@ -182,12 +182,9 @@ object AudioMetadata {
                 }
                 if (edits.artwork != null) {
                     require(edits.artwork.size <= 12 * 1024 * 1024) { "앨범아트는 12MB 이하만 가능합니다." }
-                    val image = writeArtworkTemp(context, edits.artwork)
-                    try {
-                        val artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(image)
-                        tag.deleteArtworkField()
-                        tag.setField(artwork)
-                    } finally { image.delete() }
+                    val artwork = androidArtwork(edits.artwork)
+                    tag.deleteArtworkField()
+                    tag.setField(artwork)
                 }
                 audioFile.setTag(tag)
                 AudioFileIO.write(audioFile)
@@ -324,6 +321,21 @@ object AudioMetadata {
         }
         if (edits.artwork != null) check(actual.picture?.contentEquals(edits.artwork) == true) {
             "WAV 앨범커버 저장 검증 실패"
+        }
+    }
+
+    /** Avoid StandardArtwork's desktop-only javax.imageio.ImageIO on Android. */
+    internal fun androidArtwork(bytes: ByteArray): org.jaudiotagger.tag.images.AndroidArtwork {
+        val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+        require(opts.outWidth > 0 && opts.outHeight > 0) { "이미지 데이터가 올바르지 않습니다." }
+        return org.jaudiotagger.tag.images.AndroidArtwork().apply {
+            binaryData = bytes
+            mimeType = "image/jpeg"
+            description = ""
+            pictureType = 3
+            width = opts.outWidth
+            height = opts.outHeight
         }
     }
 
