@@ -3,6 +3,8 @@ package com.musicmagic.app
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import java.io.File
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -16,6 +18,24 @@ object ArtworkEditing {
         bytes.size >= 8 && bytes.sliceArray(0 until 8).contentEquals(
             byteArrayOf(-119,80,78,71,13,10,26,10))
     fun mime(bytes: ByteArray): String = if (isPng(bytes)) "image/png" else "image/jpeg"
+
+    /** Use the original embedded picture, not the low-resolution carousel cache. */
+    fun extractEmbedded(context: Context, audio: Uri): File {
+        val retriever = MediaMetadataRetriever()
+        val bytes = try {
+            retriever.setDataSource(context, audio)
+            retriever.embeddedPicture?.takeIf { it.size <= MAX_BYTES }
+        } catch (_: Exception) {
+            null
+        } finally { runCatching { retriever.release() } }
+            ?: WavRiffTags.embeddedArtwork(context, audio)
+            ?: error("이 음악 파일에 편집할 기존 표지가 없습니다.")
+        require(bytes.size <= MAX_BYTES) { "기존 표지가 12MB를 초과합니다." }
+        val extension = if (isPng(bytes)) ".png" else ".jpg"
+        return File.createTempFile("musicmagic-existing-art-", extension, context.cacheDir).apply {
+            writeBytes(bytes)
+        }
+    }
 
     fun load(context: Context, uri: Uri): Bitmap {
         // Metadata bounds first; never decode camera-resolution originals at full size.
