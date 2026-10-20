@@ -134,9 +134,11 @@ object LibraryMedia {
         val retriever = MediaMetadataRetriever()
         val bitmap = try {
             retriever.setDataSource(context, uri)
-            retriever.embeddedPicture?.takeIf { it.size <= 16 * 1024 * 1024 }?.let(::thumbnail)
+            val embedded = retriever.embeddedPicture?.takeIf { it.size <= 16 * 1024 * 1024 }
+                ?: com.musicmagic.app.WavRiffTags.embeddedArtwork(context, uri)
+            embedded?.let(::thumbnail)
         } catch (_: Exception) {
-            null
+            com.musicmagic.app.WavRiffTags.embeddedArtwork(context, uri)?.let(::thumbnail)
         } finally {
             runCatching { retriever.release() }
         }
