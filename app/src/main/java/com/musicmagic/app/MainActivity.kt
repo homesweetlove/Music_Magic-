@@ -24,6 +24,7 @@ import com.musicmagic.app.ui.MagicButton
 import com.musicmagic.app.ui.MagicTypography
 import com.musicmagic.app.player.MusicPlayerScreen
 import com.musicmagic.app.player.MiniPlayerBar
+import com.musicmagic.app.player.PlaybackService
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -547,6 +548,8 @@ private fun MusicMagicApp() {
                     EditorField("일괄 아티스트 (빈칸은 유지)", batchArtist, { batchArtist = it })
                     EditorField("일괄 앨범 (빈칸은 유지)", batchAlbum, { batchAlbum = it })
                     MagicButton(onClick = {
+                        player?.release(); player = null
+                        PlaybackService.stopForEditing(folderFiles)
                         busy = true
                         scope.launch {
                             val (message, savedFiles) = withContext(Dispatchers.IO) {
@@ -612,6 +615,8 @@ private fun MusicMagicApp() {
                 }
 
                 MagicButton(onClick = {
+                    player?.release(); player = null
+                    PlaybackService.stopForEditing(emptyList())
                     busy = true
                     scope.launch {
                         val undoPrefs = context.getSharedPreferences("musicmagic", android.content.Context.MODE_PRIVATE)
@@ -789,6 +794,8 @@ private fun MusicMagicApp() {
                     MagicButton(
                         onClick = {
                             val uri = selectedUri ?: return@MagicButton
+                            player?.release(); player = null
+                            PlaybackService.stopForEditing(listOf(uri))
                             busy = true
                             status = ""
                             success = false
