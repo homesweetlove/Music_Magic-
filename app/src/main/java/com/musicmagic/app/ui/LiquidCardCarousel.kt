@@ -301,6 +301,20 @@ private fun LiquidCarouselCard(
     modifier: Modifier,
     onAction: () -> Unit,
 ) {
+    if (immersive) {
+        ImmersiveLiquidCard(
+            item = item,
+            modifier = modifier,
+            playing = playing,
+            motionEnabled = motionEnabled,
+            allowBlur = allowBlur,
+            offset = offset,
+            isMoving = isMoving,
+            onAction = onAction,
+        )
+        return
+    }
+
     val atmosphere by produceState(item.accent, item.artwork, item.accent) {
         // Tiny fixed-cost sampling runs off the UI thread; no decoder, Palette dependency,
         // persistent bitmap cache, or ownership of the supplied bitmap is introduced here.
