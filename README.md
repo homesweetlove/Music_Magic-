@@ -51,6 +51,41 @@ Android 10+ · API 29+ · Debug-signed preview · Google Play 배포 없음 / No
 > **미리보기 빌드 / Preview build** — 개발용 서명(debug) APK이며 Google Play 배포판이 아닙니다. / This APK uses a debug signing key and is distributed as a preview outside Google Play.
 
 <a id="features"></a>
+## Music Magic 1.2.0 — Liquid Morph and Editor Feature Pack
+
+**New features**
+
+- **True gesture-dependent liquid connection:** a transparent metaball-style
+  Bézier neck grows between leaving and arriving album covers as you drag; the
+  fluid bridge mixes their cover accents, glows, and breaks into droplets. The
+  player keeps the earlier AGSL lens, suction perspective and ambient vortex.
+- **Expandable mini-player:** tap the artwork/title or swipe up on the docked
+  mini-player; the full-screen player expands from the bottom with a spring.
+- **Album-cover editor:** center crop, 1–3× zoom, 90° rotation, PNG/JPEG output
+  or remove embedded artwork. The actual encoded MIME is stored in the tag.
+- **Higher-resolution WAV/FLAC path:** directly tag standard RIFF PCM
+  16/24/32-bit audio without re-encoding samples. On fallback, the Android
+  encoder may accept 16/24/32-bit *integer* PCM; its FLAC STREAMINFO bit depth
+  is checked before publishing the new file. If the device cannot preserve
+  the original depth, the operation fails safely. No automatic conversion of
+  float PCM or multichannel sources.
+- **Multi-track batch editor:** select individual scanned tracks, select
+  all/none, and apply common artwork, artist or album metadata. Per-file
+  results are reported; files are processed serially to avoid concurrent
+  writes to original audio.
+- **Local edit journal:** last 8 successful edit summaries with before/after
+  values, plus actual private byte-for-byte backups for files <=40 MiB,
+  capped at 120 MiB total. Restore only when a backup exists and the document
+  remains accessible. Large files still retain their basic edit summary.
+- **Automatic playlist ordering:** insertion order, title, artist, album,
+  newest modification and favorites-first, with dynamic artist and folder
+  collections; the chosen sorting mode persists between launches.
+
+The APK is a development build. Audio formats and third-party WAV art display
+remain device/player-dependent; please test on the actual device before
+replacing irreplaceable originals. Source and integration test progress are
+tracked in PR #1.
+
 ## New: WAV covers, cover-only save, and liquid poster playback
 
 ### Editing
