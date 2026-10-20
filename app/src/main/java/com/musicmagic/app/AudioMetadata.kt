@@ -86,21 +86,25 @@ object AudioMetadata {
         var temp: File? = null
         return try {
             temp = copyUriToTemp(context, uri, ext)
-            val audioFile = AudioFileIO.read(temp)
-            val tag = audioFile.tag
+            val audioFile = if (ext == "wav") runCatching { AudioFileIO.read(temp) }.getOrNull()
+                else AudioFileIO.read(temp)
+            val tag = audioFile?.tag
+            val wav = if (ext == "wav") WavRiffTags.read(temp) else null
+            fun field(key: FieldKey, fallback: String): String =
+                wav?.fields?.get(fallback) ?: tag?.getFirst(key).orEmpty()
             AudioInfo(
                 fileName = name,
-                title = tag?.getFirst(FieldKey.TITLE).orEmpty(),
-                artist = tag?.getFirst(FieldKey.ARTIST).orEmpty(),
-                album = tag?.getFirst(FieldKey.ALBUM).orEmpty(),
-                albumArtist = tag?.getFirst(FieldKey.ALBUM_ARTIST).orEmpty(),
-                genre = tag?.getFirst(FieldKey.GENRE).orEmpty(),
-                year = tag?.getFirst(FieldKey.YEAR).orEmpty(),
-                track = tag?.getFirst(FieldKey.TRACK).orEmpty(),
-                lyrics = tag?.getFirst(FieldKey.LYRICS).orEmpty(),
-                durationSeconds = audioFile.audioHeader?.trackLength?.toLong() ?: 0L,
-                bitRate = audioFile.audioHeader?.bitRate.orEmpty(),
-                sampleRate = audioFile.audioHeader?.sampleRate.orEmpty(),
+                title = field(FieldKey.TITLE, "title"),
+                artist = field(FieldKey.ARTIST, "artist"),
+                album = field(FieldKey.ALBUM, "album"),
+                albumArtist = field(FieldKey.ALBUM_ARTIST, "albumArtist"),
+                genre = field(FieldKey.GENRE, "genre"),
+                year = field(FieldKey.YEAR, "year"),
+                track = field(FieldKey.TRACK, "track"),
+                lyrics = field(FieldKey.LYRICS, "lyrics"),
+                durationSeconds = audioFile?.audioHeader?.trackLength?.toLong() ?: 0L,
+                bitRate = audioFile?.audioHeader?.bitRate.orEmpty(),
+                sampleRate = audioFile?.audioHeader?.sampleRate.orEmpty(),
                 format = ext.uppercase(),
                 sizeBytes = size,
                 supported = true,
@@ -142,28 +146,45 @@ object AudioMetadata {
                 FileOutputStream(work).use { output -> input.copyTo(output) }
             }
 
-            val audioFile = AudioFileIO.read(work)
-            val tag = audioFile.getTagOrCreateAndSetDefault()
-            tag.setField(FieldKey.TITLE, edits.title)
-            tag.setField(FieldKey.ARTIST, edits.artist)
-            tag.setField(FieldKey.ALBUM, edits.album)
-            tag.setField(FieldKey.ALBUM_ARTIST, edits.albumArtist)
-            tag.setField(FieldKey.GENRE, edits.genre)
-            tag.setField(FieldKey.YEAR, edits.year)
-            tag.setField(FieldKey.TRACK, edits.track)
-            tag.setField(FieldKey.LYRICS, edits.lyrics)
-            if (edits.artwork != null) {
-                require(edits.artwork.size <= 12 * 1024 * 1024) { "앨범아트는 12MB 이하만 가능합니다." }
-                val artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(writeArtworkTemp(context, edits.artwork))
-                tag.deleteArtworkField()
-                tag.setField(artwork)
+            if (ext == "wav") {
+                // Keep every audio chunk untouched. A standard RIFF ID3/APIC chunk
+                // can carry cover-only edits without touching title/artist.
+                WavRiffTags.write(work, edits)
+            } else {
+                val audioFile = AudioFileIO.read(work)
+                val tag = audioFile.getTagOrCreateAndSetDefault()
+                // Do not re-create absent metadata when only artwork changed.
+                val requested = listOf(
+                    FieldKey.TITLE to edits.title, FieldKey.ARTIST to edits.artist,
+                    FieldKey.ALBUM to edits.album, FieldKey.ALBUM_ARTIST to edits.albumArtist,
+                    FieldKey.GENRE to edits.genre, FieldKey.YEAR to edits.year,
+                    FieldKey.TRACK to edits.track, FieldKey.LYRICS to edits.lyrics,
+                )
+                requested.forEach { (key, value) ->
+                    if (tag.getFirst(key) != value) {
+                        if (value.isEmpty()) tag.deleteField(key) else tag.setField(key, value)
+                    }
+                }
+                if (edits.artwork != null) {
+                    require(edits.artwork.size <= 12 * 1024 * 1024) { "앨범아트는 12MB 이하만 가능합니다." }
+                    val image = writeArtworkTemp(context, edits.artwork)
+                    try {
+                        val artwork = org.jaudiotagger.tag.images.ArtworkFactory.createArtworkFromFile(image)
+                        tag.deleteArtworkField()
+                        tag.setField(artwork)
+                    } finally { image.delete() }
+                }
+                audioFile.setTag(tag)
+                AudioFileIO.write(audioFile)
             }
-            audioFile.setTag(tag)
-            AudioFileIO.write(audioFile)
 
-            val written = AudioFileIO.read(work).tag
-                ?: error("저장 검증 중 태그를 다시 읽을 수 없습니다.")
-            verifyFields(written, edits)
+            if (ext == "wav") {
+                verifyWav(work, edits)
+            } else {
+                val written = AudioFileIO.read(work).tag
+                    ?: error("저장 검증 중 태그를 다시 읽을 수 없습니다.")
+                verifyFields(written, edits)
+            }
 
             var outputUri = uri
             try {
@@ -174,9 +195,13 @@ object AudioMetadata {
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     FileOutputStream(verify).use { output -> input.copyTo(output) }
                 } ?: error("저장한 파일을 검증할 수 없습니다.")
-                val realTag = AudioFileIO.read(verify).tag
-                    ?: error("저장한 파일의 메타데이터를 읽을 수 없습니다.")
-                verifyFields(realTag, edits)
+                if (ext == "wav") {
+                    verifyWav(verify, edits)
+                } else {
+                    val realTag = AudioFileIO.read(verify).tag
+                        ?: error("저장한 파일의 메타데이터를 읽을 수 없습니다.")
+                    verifyFields(realTag, edits)
+                }
 
                 if (edits.fileName != originalName) {
                     outputUri = DocumentsContract.renameDocument(
@@ -263,6 +288,21 @@ object AudioMetadata {
         prefs.edit().remove("undo_uri").remove("undo_original_uri").remove("undo_name").apply()
         backup.delete()
         SaveResult(restored, restoredUri)
+    }
+
+    private fun verifyWav(file: File, edits: AudioEdits) {
+        val actual = WavRiffTags.read(file)
+        val requested = mapOf(
+            "title" to edits.title, "artist" to edits.artist, "album" to edits.album,
+            "albumArtist" to edits.albumArtist, "genre" to edits.genre,
+            "year" to edits.year, "track" to edits.track, "lyrics" to edits.lyrics,
+        )
+        requested.forEach { (key, value) ->
+            check(actual.fields[key].orEmpty() == value) { "WAV $key 저장 검증 실패" }
+        }
+        if (edits.artwork != null) check(actual.picture?.contentEquals(edits.artwork) == true) {
+            "WAV 앨범커버 저장 검증 실패"
+        }
     }
 
     private fun writeArtworkTemp(context: Context, bytes: ByteArray): File {
