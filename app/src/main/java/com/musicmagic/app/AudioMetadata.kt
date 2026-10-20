@@ -43,7 +43,10 @@ data class AudioEdits(
     val artwork: ByteArray? = null,
 )
 
-data class SaveResult(val info: AudioInfo, val uri: Uri)
+data class SaveResult(
+    val info: AudioInfo, val uri: Uri,
+    val convertedFromWav: Boolean = false,
+)
 
 object AudioMetadata {
     private const val UNDO_FILE = "musicmagic-last-backup"
@@ -149,7 +152,19 @@ object AudioMetadata {
             if (ext == "wav") {
                 // Keep every audio chunk untouched. A standard RIFF ID3/APIC chunk
                 // can carry cover-only edits without touching title/artist.
-                WavRiffTags.write(work, edits)
+                try {
+                    WavRiffTags.write(work, edits)
+                } catch (wavError: Exception) {
+                    if (edits.artwork == null) throw wavError
+                    // Fall back only if WAV cannot carry this artwork. Keep the
+                    // source WAV untouched; the new FLAC is verified first.
+                    return@runCatching WavFlacFallback.convert(context, uri, edits).getOrElse {
+                        throw IllegalStateException(
+                            "WAV 표지 저장 실패. 자동 FLAC 변환도 불가능합니다: ${it.message}",
+                            it,
+                        )
+                    }
+                }
             } else {
                 val audioFile = AudioFileIO.read(work)
                 val tag = audioFile.getTagOrCreateAndSetDefault()
@@ -221,6 +236,13 @@ object AudioMetadata {
                         "저장 중 문제가 발생했고 자동 복구도 실패했습니다. 원본 파일을 확인하세요.",
                         writeError,
                     )
+                }
+                if (ext == "wav" && edits.artwork != null) {
+                    return@runCatching WavFlacFallback.convert(context, uri, edits).getOrElse {
+                        throw IllegalStateException(
+                            "WAV 원본을 복구했지만 FLAC 변환이 불가능합니다: ${it.message}", it,
+                        )
+                    }
                 }
                 throw writeError
             }
