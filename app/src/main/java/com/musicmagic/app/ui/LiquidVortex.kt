@@ -107,10 +107,18 @@ fun LiquidVortexBackdrop(
                 )
                 if (point == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
             }
+            // Broad translucent ribbon plus a sharp specular edge: together they
+            // read as flowing liquid rather than a thin decorative line.
+            drawPath(
+                path = path,
+                brush = sweep,
+                style = Stroke(width = (19f + arm * 2f) * density, cap = StrokeCap.Round),
+                alpha = (.12f + .21f * energy),
+            )
             drawPath(
                 path = path, brush = sweep,
                 style = Stroke(width = (2.2f + arm % 3) * density, cap = StrokeCap.Round),
-                alpha = (.30f + .40f * energy),
+                alpha = (.48f + .48f * energy),
             )
         }
         // A breathing inner core, tiny enough to avoid washing out text.
