@@ -30,6 +30,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -460,7 +466,21 @@ private fun MusicMagicApp() {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 AnimatedContent(
                     targetState = currentScreen,
-                    transitionSpec = { fadeIn(tween(240)) togetherWith fadeOut(tween(160)) },
+                    transitionSpec = {
+                        if (targetState == "player") {
+                            (slideInVertically(
+                                initialOffsetY = { it },
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow),
+                            ) + scaleIn(initialScale = .91f, animationSpec = tween(340)) +
+                                fadeIn(tween(280))) togetherWith
+                                (fadeOut(tween(170)) + scaleOut(targetScale = .96f, animationSpec = tween(210)))
+                        } else {
+                            (fadeIn(tween(260)) + scaleIn(initialScale = .98f, animationSpec = tween(290))) togetherWith
+                                (slideOutVertically(targetOffsetY = { it }, animationSpec = tween(320)) +
+                                    fadeOut(tween(240)))
+                        }
+                    },
                     label = "Music Magic screen",
                 ) { screen ->
                     if (screen == "player") {
